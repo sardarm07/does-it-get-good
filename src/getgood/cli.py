@@ -1,15 +1,19 @@
 """Command-line entry point: getgood <command>."""
 
+import json
 from datetime import date
 from pathlib import Path
 from typing import Annotated
 
+import duckdb
 import typer
 
 from getgood import __version__
 from getgood.config import CURRENT_DB, DATA_DIR
 from getgood.fetch import FetchError, fetch_all
 from getgood.load import build_current
+from getgood.report import answer
+from getgood.search import Found, Match, find
 from getgood.validate import Finding, check_files, remember_good
 
 app = typer.Typer(
@@ -76,6 +80,51 @@ def sync(data_dir: DataDir = DATA_DIR) -> None:
         raise typer.Exit(1)
     state = "already up to date" if built.skipped else "built"
     typer.echo(f"Tables {state}: {built.series:,} series, {built.rated_episodes:,} rated episodes")
+
+
+@app.command()
+def show(
+    name: Annotated[str, typer.Argument(help="The series as you'd type it, or its IMDb ID.")],
+    year: Annotated[
+        int | None, typer.Option(help="The year it started, to choose between namesakes.")
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Print the answer as JSON.")] = False,
+    data_dir: DataDir = DATA_DIR,
+) -> None:
+    """Where a series gets good, where it slumps, and its low points."""
+    db = data_dir / CURRENT_DB
+    if not db.exists():
+        typer.echo("No data yet. Run getgood sync first.", err=True)
+        raise typer.Exit(1)
+    with duckdb.connect(str(db), read_only=True) as con:
+        match = _choose(find(con, name, year=year), name, ask=not as_json)
+        result = answer(con, match)
+    if as_json:
+        typer.echo(json.dumps(result.to_json(), ensure_ascii=False, indent=2))
+    else:
+        typer.echo(result.to_text())
+
+
+def _choose(found: Found, name: str, *, ask: bool) -> Match:
+    """The match to answer for, asking which one when the name could mean several."""
+    if found.best is None:
+        typer.echo(f'No show matches "{name}".', err=True)
+        raise typer.Exit(1)
+    if not found.ambiguous:
+        return found.best
+    options = [f"  {i}. {m.title} ({m.years}), {m.imdb_id}" for i, m in enumerate(found.choices, 1)]
+    if not ask:
+        typer.echo(f'"{name}" could mean:', err=True)
+        typer.echo("\n".join(options), err=True)
+        typer.echo("Add --year or give the IMDb ID to choose.", err=True)
+        raise typer.Exit(2)
+    typer.echo(f'"{name}" could mean:')
+    typer.echo("\n".join(options))
+    while True:
+        pick: int = typer.prompt("Which one", default=1, type=int)
+        if 1 <= pick <= len(found.choices):
+            return found.choices[pick - 1]
+        typer.echo(f"Choose a number from 1 to {len(found.choices)}.")
 
 
 def _print_findings(findings: list[Finding]) -> None:

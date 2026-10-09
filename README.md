@@ -4,7 +4,7 @@ Find the episode where a TV series gets good, where it slumps, and when it got r
 
 `getgood` is a command-line tool for personal use. It works from IMDb's free non-commercial datasets and keeps everything it downloads on your own machine.
 
-> **Status:** early development. So far it downloads and checks IMDb's files and builds its tables; verdicts come next.
+> **Status:** early development. Verdicts work; rating history and review bombs come next.
 
 ## Setup
 
@@ -25,6 +25,28 @@ getgood sync                   # download, check and load IMDb's latest files (a
 `sync` downloads only files IMDb has changed, checks them, and rebuilds `data/current.duckdb`: every scripted series and miniseries with 6 or more rated episodes, with their episodes and ratings. A file that fails a check stops the sync, and the tables from the last good sync are kept.
 
 Data lives in `data/` under the current directory, or wherever `GETGOOD_DATA` points, and stays on your machine.
+
+```bash
+getgood show "parks and rec"            # where it gets good, slumps and low points
+getgood show "the office" --year 2005   # choose between shows with the same name
+getgood show tt1234567 --json           # by IMDb ID, as JSON (see schema/answer.schema.json)
+```
+
+The answer for a made-up show looks like this:
+
+```text
+Example Show (2015–2021) · tt1234567 · 64 rated episodes · IMDb's files of 2026-10-09
+
+Gets good at S2E3 (high confidence)
+S1E1–S2E2 average 7.3. From S2E3 the next 31 episodes average 8.2 (+0.9).
+
+Slumps:     S5E2–S5E9, 0.6 below its usual level
+Low points: S6E10
+
+Information courtesy of IMDb (https://www.imdb.com). Used with permission.
+```
+
+Ratings with few votes are pulled toward the show's average before anything else happens, so a handful of votes can't create a turn. The verdict comes from splitting the episodes into flat stretches and reading the jumps between them; the reason line shows the numbers behind it.
 
 ## Development
 

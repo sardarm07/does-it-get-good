@@ -66,6 +66,8 @@ class Verdict:
     stretches: tuple[Stretch, ...]
     slumps: tuple[Slump, ...]
     low_points: tuple[str, ...]
+    damped: tuple[float, ...]
+    """Each episode's rating after damping, in the same order."""
 
 
 def judge(episodes: Sequence[Episode]) -> Verdict:
@@ -89,6 +91,7 @@ def judge(episodes: Sequence[Episode]) -> Verdict:
         stretches=parts,
         slumps=_slumps(episodes, parts, median),
         low_points=_low_points(episodes, x, parts, sigma),
+        damped=tuple(float(v) for v in x),
     )
 
 
