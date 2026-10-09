@@ -15,7 +15,7 @@ from getgood.fetch import Download, FetchError
 from getgood.load import Build, build_current
 from getgood.search import Found, Match
 from getgood.validate import Finding, Report
-from tests.helpers import downloads, season, write_fixture, write_history
+from tests.helpers import burst, downloads, season, write_fixture, write_history
 
 IMDB_DATE = "Fri, 09 Oct 2026 00:39:31 GMT"
 
@@ -226,6 +226,81 @@ def test_show_json_includes_the_history_and_matches_the_schema(bombed: Path) -> 
         "ratio": 3.33,
         "new_votes_rating": None,
     }
+
+
+@pytest.fixture
+def two_bombs(tmp_path: Path) -> Path:
+    """Tables where every title has 1,000 votes, and a history with two review bombs on
+    Grey's Anatomy: S1E3 at launch, and a burst of low votes on the series page on day 50."""
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    write_fixture(raw, votes=1_000)
+    build_current(raw, tmp_path / CURRENT_DB, downloads(raw))
+    rows = season(1, [1_000_001 + k for k in range(6)], bombed=1_000_003)
+    page = burst([r for r in rows if r[0] == 1], at=50, extra=5_000, rating=8.2)
+    write_history(tmp_path / "history", page + [r for r in rows if r[0] != 1])
+    return tmp_path
+
+
+def test_bombs_lists_events_across_shows_newest_first(two_bombs: Path) -> None:
+    args = ["bombs", "--since", "2023-01-01", "--data-dir", str(two_bombs)]
+
+    result = CliRunner().invoke(app, args)
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == [
+        "Review bombs from 2023-01-01 to 2023-03-01: newest first",
+        "",
+        "2023-02-20  Grey's Anatomy (2005–) · tt0000001",
+        "    series page: 5,000 more votes than usual, rating -0.3",
+        "2023-01-26 to 2023-02-07  Grey's Anatomy (2005–) · tt0000001",
+        "    S1E3: at launch, up to 3.9× the votes of its season's other episodes "
+        "and 2.0 below their rating",
+        "",
+        "Information courtesy of IMDb (https://www.imdb.com). Used with permission.",
+    ]
+
+
+def test_bombs_keeps_the_biggest_when_limited(two_bombs: Path) -> None:
+    args = ["bombs", "--since", "2023-01-01", "--limit", "1", "--data-dir", str(two_bombs)]
+
+    result = CliRunner().invoke(app, args)
+
+    lines = result.output.splitlines()
+    assert (
+        lines[0] == "Review bombs from 2023-01-01 to 2023-03-01: the 1 biggest of 2, newest first"
+    )
+    assert lines[2] == "2023-01-26 to 2023-02-07  Grey's Anatomy (2005–) · tt0000001"
+    assert len(lines) == 6
+
+
+def test_bombs_looks_at_the_last_month_unless_told(two_bombs: Path) -> None:
+    result = CliRunner().invoke(app, ["bombs", "--data-dir", str(two_bombs)])
+    quiet = CliRunner().invoke(
+        app, ["bombs", "--until", "2023-01-20", "--data-dir", str(two_bombs)]
+    )
+
+    assert (
+        result.output.splitlines()[0] == "Review bombs from 2023-01-30 to 2023-03-01: newest first"
+    )
+    assert "2023-01-30 to 2023-02-07  Grey's Anatomy (2005–) · tt0000001" in result.output
+    assert quiet.output.splitlines()[0] == "Review bombs from 2022-12-21 to 2023-01-20: none"
+
+
+def test_bombs_rejects_a_start_after_the_end(two_bombs: Path) -> None:
+    args = ["bombs", "--since", "2023-02-01", "--until", "2023-01-20", "--data-dir"]
+
+    result = CliRunner().invoke(app, [*args, str(two_bombs)])
+
+    assert result.exit_code == 2
+    assert "--since 2023-02-01 is after the last day, 2023-01-20." in result.output
+
+
+def test_bombs_needs_a_history(data_dir: Path) -> None:
+    result = CliRunner().invoke(app, ["bombs", "--data-dir", str(data_dir)])
+
+    assert result.exit_code == 1
+    assert "No history yet. Run getgood sync first." in result.output
 
 
 GREYS = Match(1, "Grey's Anatomy", 2005, None, 100, 4.0)

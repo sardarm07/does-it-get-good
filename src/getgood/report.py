@@ -1,7 +1,7 @@
 """What getgood show says about one series, as data and as text."""
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -70,12 +70,7 @@ class Answer:
         return "No clear turn"
 
     def label(self, tid: int) -> str:
-        return self.labels.get(tid, f"tt{tid:07d}")
-
-    def ordered(self, titles: tuple[int, ...]) -> list[int]:
-        """Titles in the show's order: the series page, then by season and episode."""
-        place = {tid: i for i, tid in enumerate(self.labels)}
-        return sorted(titles, key=lambda t: place.get(t, len(place)))
+        return label(self.labels, tid)
 
     def to_json(self) -> dict[str, Any]:
         v = self.verdict
@@ -145,7 +140,7 @@ class Answer:
             "kind": e.kind,
             "from": e.start.isoformat(),
             "to": e.end.isoformat(),
-            "titles": [self.label(t) for t in self.ordered(e.titles)],
+            "titles": [self.label(t) for t in in_order(e.titles, self.labels)],
             "series_wide": e.series_wide,
             "extra_votes": round(e.extra_votes),
             "flags": [self._flag_json(f) for f in e.flags],
@@ -202,7 +197,7 @@ class Answer:
             return _field("Review bombs", ["unknown: the history is empty until getgood sync"])
         by_kind: dict[str, list[str]] = defaultdict(list)
         for e in h.events:
-            by_kind[e.kind].append(self._event_text(e))
+            by_kind[e.kind].append(f"{when(e)}, {what(e, self.labels)}")
         lines = _field("Review bombs", by_kind["bomb"])
         if by_kind["boost"]:
             lines += _field("Boosts", by_kind["boost"])
@@ -210,38 +205,55 @@ class Answer:
             lines += _field("Vote surges", by_kind["suspicious"])
         return [*lines, *_field("History", [f"{h.days:,} days from {h.first} to {h.last}"])]
 
-    def _event_text(self, e: Event) -> str:
-        when = str(e.start) if e.start == e.end else f"{e.start} to {e.end}"
-        effects: list[str] = []
-        launch = [f for f in e.flags if f.launch]
-        if launch:
-            ratio = max(f.ratio or 0.0 for f in launch)
-            gap = min(f.rating_change for f in launch)
-            effects.append(
-                f"at launch, up to {ratio:.1f}× the votes of its season's other episodes "
-                f"and {-gap:.1f} below their rating"
-            )
-        daily = [f for f in e.flags if not f.launch]
-        if daily:
-            change: dict[int, float] = defaultdict(float)
-            for f in daily:
-                change[f.tid] += f.rating_change
-            biggest = max(change.values(), key=abs)
-            moved = f", rating {biggest:+.1f}" if abs(biggest) >= 0.05 else ", rating unmoved"
-            extra = sum(f.extra_votes for f in daily)
-            effects.append(f"{extra:,.0f} more votes than usual{moved}")
-        return f"{when}, {self._titles_text(e)}: " + "; ".join(effects)
 
-    def _titles_text(self, e: Event) -> str:
-        names = [
-            "series page" if self.label(t) == SERIES_PAGE else self.label(t)
-            for t in self.ordered(e.titles)
-        ]
-        if len(names) <= MAX_NAMED:
-            return ", ".join(names)
-        episodes = len([t for t in e.titles if t != e.show])
-        counted = f"{episodes} episodes"
-        return f"series page and {counted}" if e.show in e.titles else counted
+def label(labels: Mapping[int, str], tid: int) -> str:
+    """A title's label: SERIES_PAGE, an episode's like S2E1, or its IMDb ID if unknown."""
+    return labels.get(tid, f"tt{tid:07d}")
+
+
+def in_order(titles: Iterable[int], labels: Mapping[int, str]) -> list[int]:
+    """Titles in the order the labels list them: series pages, then by season and episode."""
+    place = {tid: i for i, tid in enumerate(labels)}
+    return sorted(titles, key=lambda t: place.get(t, len(place)))
+
+
+def when(e: Event) -> str:
+    """An event's day, or its first and last."""
+    return str(e.start) if e.start == e.end else f"{e.start} to {e.end}"
+
+
+def what(e: Event, labels: Mapping[int, str]) -> str:
+    """The titles an event touched and what happened to them, in one line."""
+    effects: list[str] = []
+    launch = [f for f in e.flags if f.launch]
+    if launch:
+        ratio = max(f.ratio or 0.0 for f in launch)
+        gap = min(f.rating_change for f in launch)
+        effects.append(
+            f"at launch, up to {ratio:.1f}× the votes of its season's other episodes "
+            f"and {-gap:.1f} below their rating"
+        )
+    daily = [f for f in e.flags if not f.launch]
+    if daily:
+        change: dict[int, float] = defaultdict(float)
+        for f in daily:
+            change[f.tid] += f.rating_change
+        biggest = max(change.values(), key=abs)
+        moved = f", rating {biggest:+.1f}" if abs(biggest) >= 0.05 else ", rating unmoved"
+        extra = sum(f.extra_votes for f in daily)
+        effects.append(f"{extra:,.0f} more votes than usual{moved}")
+    return f"{_titles(e, labels)}: " + "; ".join(effects)
+
+
+def _titles(e: Event, labels: Mapping[int, str]) -> str:
+    names = [
+        "series page" if label(labels, t) == SERIES_PAGE else label(labels, t)
+        for t in in_order(e.titles, labels)
+    ]
+    if len(names) <= MAX_NAMED:
+        return ", ".join(names)
+    counted = f"{len([t for t in e.titles if t != e.show])} episodes"
+    return f"series page and {counted}" if e.show in e.titles else counted
 
 
 def _field(name: str, items: list[str]) -> list[str]:
@@ -282,5 +294,5 @@ def _history(
     if relation is None or not days:
         return None
     titles = "tid IN (" + ", ".join(str(t) for t in labels) + ")"
-    flags = find_flags(con, relation, "episodes", days, titles=titles)
+    flags = find_flags(con, relation, "episodes", days, where=titles)
     return History(len(days), min(days), max(days), tuple(group(flags)))

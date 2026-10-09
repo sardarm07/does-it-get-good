@@ -1,7 +1,7 @@
 """Command-line entry point: getgood <command>."""
 
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -10,13 +10,15 @@ import typer
 
 from getgood import __version__, archive
 from getgood.backfill import Span, backfill, save_today, span
-from getgood.config import CURRENT_DB, DATA_DIR, MAX_GAP_DAYS
+from getgood.config import CURRENT_DB, DATA_DIR, MAX_GAP_DAYS, RECENT_DAYS
 from getgood.duck import scalar
 from getgood.fetch import FetchError, fetch_all
+from getgood.history import known_days, source
 from getgood.load import build_current
 from getgood.report import answer
 from getgood.runs import log_run, recent_runs
 from getgood.search import Found, Match, find
+from getgood.sweep import listing, sweep
 from getgood.validate import Finding, check_files, remember_good
 
 app = typer.Typer(
@@ -190,6 +192,45 @@ def show(
         typer.echo(json.dumps(result.to_json(), ensure_ascii=False, indent=2))
     else:
         typer.echo(result.to_text())
+
+
+@app.command()
+def bombs(
+    since: Annotated[
+        datetime | None,
+        typer.Option(
+            formats=["%Y-%m-%d"],
+            help=f"The first day to look at. Defaults to {RECENT_DAYS} days before the last.",
+        ),
+    ] = None,
+    until: Annotated[
+        datetime | None,
+        typer.Option(
+            formats=["%Y-%m-%d"], help="The last day to look at. Defaults to the history's last."
+        ),
+    ] = None,
+    every_kind: Annotated[
+        bool, typer.Option("--all", help="List boosts and vote surges too, not just bombs.")
+    ] = False,
+    limit: Annotated[int, typer.Option(min=1, help="How many events to list.")] = 20,
+    data_dir: DataDir = DATA_DIR,
+) -> None:
+    """The biggest review bombs across all shows, newest first."""
+    db, history = data_dir / CURRENT_DB, data_dir / "history"
+    relation, days = source(history), known_days(history)
+    if not db.exists() or relation is None or not days:
+        typer.echo("No history yet. Run getgood sync first.", err=True)
+        raise typer.Exit(1)
+    last = until.date() if until else max(days)
+    first = since.date() if since else last - timedelta(days=RECENT_DAYS)
+    if first > last:
+        typer.echo(f"--since {first} is after the last day, {last}.", err=True)
+        raise typer.Exit(2)
+    with duckdb.connect(str(db), read_only=True) as con:
+        events = sweep(con, relation, days, since=first, until=last)
+        typer.echo(
+            listing(con, events, since=first, until=last, every_kind=every_kind, limit=limit)
+        )
 
 
 def _choose(found: Found, name: str, *, ask: bool) -> Match:

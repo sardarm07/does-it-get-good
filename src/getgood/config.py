@@ -118,6 +118,8 @@ LAUNCH_DROP = 0.5
 """...with a rating at least this far below theirs."""
 EVENT_DAYS = 2
 """Flags on one show this close together are one event."""
+RECENT_DAYS = 30
+"""getgood bombs looks back this many days from the history's last day, unless told."""
 SERIES_WIDE_EPISODES = 3
 """An event touching this many episodes, or the series page, is series-wide."""
 

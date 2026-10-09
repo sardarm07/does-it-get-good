@@ -44,13 +44,13 @@ SHOCK_X10 = round(SHOCK_DROP * 10)
 
 # Ratings are compared in tenths, as integers, so 8.3 - 8.5 is exactly -0.2.
 # {history}: (tid, date, rating_x10, votes); {episodes}: (tid, series, season);
-# {titles}: a condition on tid.
+# {where}: a condition on the history's rows.
 DAILY = f"""
     WITH h AS (
         SELECT tid, date, CAST(rating_x10 AS INTEGER) AS rating_x10,
                CAST(votes AS BIGINT) AS votes
         FROM {{history}}
-        WHERE {{titles}}
+        WHERE {{where}}
     ),
     steps AS (
         SELECT tid, date, rating_x10, votes,
@@ -99,15 +99,12 @@ DAILY = f"""
       AND ($until IS NULL OR s.date <= $until)
 """
 
-# $days: every day the history holds.
+# The history is read twice rather than through one shared CTE, which DuckDB would hold in
+# memory whole when sweeping every show. $days: every day the history holds.
 LAUNCH = f"""
-    WITH h AS (
-        SELECT tid, date, CAST(rating_x10 AS INTEGER) AS rating_x10,
-               CAST(votes AS BIGINT) AS votes
-        FROM {{history}}
-        WHERE {{titles}}
+    WITH first_seen AS (
+        SELECT tid, min(date) AS first_day FROM {{history}} WHERE {{where}} GROUP BY tid
     ),
-    first_seen AS (SELECT tid, min(date) AS first_day FROM h GROUP BY tid),
     observed AS (
         -- the history saw the episode arrive: it holds a day shortly before the first one
         SELECT f.tid, f.first_day
@@ -118,9 +115,10 @@ LAUNCH = f"""
         )
     ),
     aged AS (
-        SELECT h.tid, e.series, e.season, h.date, h.rating_x10, h.votes,
+        SELECT h.tid, e.series, e.season, h.date,
+               CAST(h.rating_x10 AS INTEGER) AS rating_x10, CAST(h.votes AS BIGINT) AS votes,
                h.date - o.first_day AS age
-        FROM h JOIN observed o USING (tid) JOIN {{episodes}} e USING (tid)
+        FROM {{history}} h JOIN observed o USING (tid) JOIN {{episodes}} e USING (tid)
         WHERE h.date - o.first_day BETWEEN 1 AND {LAUNCH_DAYS - 1}
     ),
     compared AS (
@@ -188,21 +186,39 @@ def find_flags(
     episodes: str,
     days: Collection[date],
     *,
-    titles: str = "true",
+    where: str = "true",
     since: date | None = None,
     until: date | None = None,
 ) -> list[Flag]:
-    """Every daily and launch flag between since and until, for the titles the filter keeps.
+    """Every daily and launch flag between since and until, in date order.
 
     The history and the episodes (tid, series, season) are SQL relations; days are every
-    day the history holds. Each title's baseline and first day come from its whole history,
-    not just the days asked about.
+    day the history holds. `where` must keep whole titles' histories: each title's baseline
+    and first day come from all of it, not just the days asked about.
     """
-    params: dict[str, object] = {"since": since, "until": until}
+    found = daily_flags(con, history, episodes, where=where, since=since, until=until)
+    found += launch_flags(con, history, episodes, days, where=where, since=since, until=until)
+    return sorted(found, key=lambda f: (f.day, f.show, f.tid))
+
+
+def daily_flags(
+    con: duckdb.DuckDBPyConnection,
+    history: str,
+    episodes: str,
+    *,
+    where: str = "true",
+    since: date | None = None,
+    until: date | None = None,
+) -> list[Flag]:
+    """Each day a title's new votes surged against its own pace, between since and until.
+
+    A day is judged against the title's 28 history days before it, so a `where` that limits
+    dates must keep those.
+    """
     found: list[Flag] = []
-    daily = DAILY.format(history=history, episodes=episodes, titles=titles)
+    sql = DAILY.format(history=history, episodes=episodes, where=where)
     for tid, show, day, votes, rating_x10, dr_x10, extra, z, new_rating, error in con.execute(
-        daily, params
+        sql, {"since": since, "until": until}
     ).fetchall():
         kind: Kind = (
             "bomb" if dr_x10 <= -SHOCK_X10 else "boost" if dr_x10 >= SHOCK_X10 else "suspicious"
@@ -222,9 +238,29 @@ def find_flags(
                 new_votes_rating=new_rating if error <= NEW_VOTES_ERROR else None,
             )
         )
-    launch = LAUNCH.format(history=history, episodes=episodes, titles=titles)
+    return found
+
+
+def launch_flags(
+    con: duckdb.DuckDBPyConnection,
+    history: str,
+    episodes: str,
+    days: Collection[date],
+    *,
+    where: str = "true",
+    since: date | None = None,
+    until: date | None = None,
+) -> list[Flag]:
+    """Each day of an episode's first two weeks that it drew far more votes than its season's
+    other episodes at the same age, and a far lower rating.
+
+    `where` must keep whole titles' histories, and every episode of a season it keeps: an
+    episode cut short looks newer than it is, and a missing one changes its siblings' median.
+    """
+    found: list[Flag] = []
+    sql = LAUNCH.format(history=history, episodes=episodes, where=where)
     for tid, show, day, votes, rating_x10, siblings_votes, siblings_x10 in con.execute(
-        launch, params | {"days": sorted(days)}
+        sql, {"since": since, "until": until, "days": sorted(days)}
     ).fetchall():
         found.append(
             Flag(
@@ -240,7 +276,7 @@ def find_flags(
                 ratio=votes / siblings_votes,
             )
         )
-    return sorted(found, key=lambda f: (f.day, f.show, f.tid))
+    return found
 
 
 def group(flags: Iterable[Flag]) -> list[Event]:
