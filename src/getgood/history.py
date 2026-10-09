@@ -1,9 +1,11 @@
-"""Ratings by day: one row per in-scope title per day, in yearly Parquet files.
+"""Ratings by day: one row per in-scope title per day, in monthly Parquet files.
 
 A sync writes each new day to data/history/days/<day>.parquet, then folds the days into
-data/history/<year>.parquet, sorted by title and then date, so one show's whole history
-reads in milliseconds. Only in-scope titles are kept: the series in current.duckdb and
-their episodes.
+data/history/<year>-<month>.parquet, sorted by title and then date, so one show's whole
+history reads in milliseconds. A month is small enough to re-sort on every sync, and each
+month's file lists its days in its metadata, so the history's days are known without
+reading its rows. Only in-scope titles are kept: the series in current.duckdb and their
+episodes.
 """
 
 from collections.abc import Iterable
@@ -17,21 +19,23 @@ from getgood.config import MAX_GAP_DAYS
 from getgood.duck import quote, read_imdb, scalar
 
 DAYS = "days"
+MONTHS = "[0-9][0-9][0-9][0-9]-[0-9][0-9].parquet"
+DAYS_KEY = "getgood_days"
+"""The metadata key under which a month's file lists its days."""
 
 
 def known_days(history: Path) -> set[date]:
-    """Every day already in the history, in a yearly file or waiting to be folded in."""
+    """Every day already in the history, in a month's file or waiting to be folded in."""
     days = {date.fromisoformat(p.stem) for p in (history / DAYS).glob("*.parquet")}
-    years = sorted(history.glob("[0-9][0-9][0-9][0-9].parquet"))
-    if years:
+    months = sorted(history.glob(MONTHS))
+    if months:
         with duckdb.connect() as con:
-            files = "[" + ", ".join(quote(p) for p in years) + "]"
-            days |= {
-                d
-                for (d,) in con.execute(
-                    f"SELECT DISTINCT date FROM read_parquet({files})"
-                ).fetchall()
-            }
+            for (listed,) in con.execute(
+                f"SELECT decode(value) FROM parquet_kv_metadata({_list(months)}) "
+                "WHERE key = encode(?)",
+                [DAYS_KEY],
+            ).fetchall():
+                days |= {date.fromisoformat(d) for d in listed.split(",")}
     return days
 
 
@@ -67,43 +71,60 @@ def write_day(raw_file: Path, day: date, history: Path, current_db: Path) -> int
         tmp.unlink(missing_ok=True)
 
 
-def compact(history: Path) -> list[int]:
-    """Fold the waiting days into their years' files, sorted by title then date.
+def compact(history: Path) -> list[str]:
+    """Fold the waiting days into their months' files, sorted by title then date.
 
-    Returns the years rewritten. A day already in its year's file keeps its first copy.
+    Returns the months rewritten, as YYYY-MM. A day already in its month's file keeps the
+    copy it has.
     """
     waiting = sorted((history / DAYS).glob("*.parquet"))
-    years = sorted({int(p.stem[:4]) for p in waiting})
-    for year in years:
-        target = history / f"{year}.parquet"
-        days = [p for p in waiting if p.stem.startswith(f"{year}-")]
-        sources = ([target] if target.exists() else []) + days
-        tmp = target.with_name(target.name + ".tmp")
-        files = "[" + ", ".join(quote(p) for p in sources) + "]"
+    rewritten: list[str] = []
+    for month in sorted({p.stem[:7] for p in waiting}):
+        target = history / f"{month}.parquet"
+        days = [p for p in waiting if p.stem.startswith(f"{month}-")]
         with duckdb.connect() as con:
-            con.execute(f"""
-                COPY (
-                    SELECT tid, date, rating_x10, votes
-                    FROM read_parquet({files}, filename = true)
-                    QUALIFY row_number() OVER (PARTITION BY tid, date ORDER BY filename) = 1
-                    ORDER BY tid, date
-                ) TO {quote(tmp)} (FORMAT parquet, COMPRESSION zstd)""")
-        tmp.replace(target)
+            held: set[date] = set()
+            if target.exists():
+                held = {
+                    d
+                    for (d,) in con.execute(
+                        f"SELECT DISTINCT date FROM read_parquet({quote(target)})"
+                    ).fetchall()
+                }
+            new = [p for p in days if date.fromisoformat(p.stem) not in held]
+            if new:
+                listed = ",".join(
+                    d.isoformat() for d in sorted(held | {date.fromisoformat(p.stem) for p in new})
+                )
+                sources = ([target] if target.exists() else []) + new
+                tmp = target.with_name(target.name + ".tmp")
+                con.execute(f"""
+                    COPY (
+                        SELECT tid, date, rating_x10, votes
+                        FROM read_parquet({_list(sources)})
+                        ORDER BY tid, date
+                    ) TO {quote(tmp)}
+                    (FORMAT parquet, COMPRESSION zstd, KV_METADATA {{{DAYS_KEY}: '{listed}'}})""")
+                tmp.replace(target)
+                rewritten.append(month)
         for p in days:
             p.unlink()
-    return years
+    return rewritten
 
 
 def source(history: Path) -> str | None:
     """SQL that reads the whole history, or None while it's empty."""
-    files = sorted(history.glob("[0-9][0-9][0-9][0-9].parquet"))
-    files += sorted((history / DAYS).glob("*.parquet"))
+    files = sorted(history.glob(MONTHS)) + sorted((history / DAYS).glob("*.parquet"))
     if not files:
         return None
-    return "read_parquet([" + ", ".join(quote(p) for p in files) + "])"
+    return f"read_parquet({_list(files)})"
 
 
 def gaps(days: Iterable[date], max_gap: int = MAX_GAP_DAYS) -> list[tuple[date, date]]:
     """Each pair of neighbouring history days more than max_gap days apart."""
     ordered = sorted(days)
     return [(a, b) for a, b in pairwise(ordered) if (b - a).days > max_gap]
+
+
+def _list(paths: Iterable[Path]) -> str:
+    return "[" + ", ".join(quote(p) for p in paths) + "]"

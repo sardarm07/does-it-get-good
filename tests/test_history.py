@@ -46,32 +46,60 @@ def test_a_day_keeps_only_in_scope_titles(setup: tuple[Path, Path, Path]) -> Non
     assert list((history / DAYS).iterdir()) == [day_file]
 
 
-def test_days_fold_into_their_years_sorted_by_title(setup: tuple[Path, Path, Path]) -> None:
+def test_days_fold_into_their_months_sorted_by_title(setup: tuple[Path, Path, Path]) -> None:
     raw, current, history = setup
-    for day, votes in ((date(2023, 12, 31), 100), (date(2024, 1, 1), 110), (date(2023, 1, 30), 90)):
+    for day, votes in ((date(2023, 12, 31), 100), (date(2024, 1, 1), 110), (date(2023, 12, 2), 90)):
         write_day(ratings_on(raw, votes), day, history, current)
 
-    assert compact(history) == [2023, 2024]
+    assert compact(history) == ["2023-12", "2024-01"]
 
-    assert sorted(p.name for p in history.glob("*.parquet")) == ["2023.parquet", "2024.parquet"]
+    assert sorted(p.name for p in history.glob("*.parquet")) == [
+        "2023-12.parquet",
+        "2024-01.parquet",
+    ]
     assert list((history / DAYS).iterdir()) == []
-    ordered = rows(f"SELECT tid, date FROM '{history / '2023.parquet'}'")
+    ordered = rows(f"SELECT tid, date FROM '{history / '2023-12.parquet'}'")
     assert ordered == sorted(ordered)
-    assert known_days(history) == {date(2023, 1, 30), date(2023, 12, 31), date(2024, 1, 1)}
+    assert known_days(history) == {date(2023, 12, 2), date(2023, 12, 31), date(2024, 1, 1)}
 
 
-def test_a_later_compaction_adds_to_the_year(setup: tuple[Path, Path, Path]) -> None:
+def test_a_later_compaction_adds_to_the_month(setup: tuple[Path, Path, Path]) -> None:
     raw, current, history = setup
     write_day(ratings_on(raw, 100), date(2023, 1, 30), history, current)
     compact(history)
     write_day(ratings_on(raw, 120), date(2023, 1, 31), history, current)
 
-    compact(history)
+    assert compact(history) == ["2023-01"]
 
     assert rows(f"SELECT date, max(votes) FROM {source(history)} GROUP BY 1 ORDER BY 1") == [
         (date(2023, 1, 30), 100),
         (date(2023, 1, 31), 120),
     ]
+    assert known_days(history) == {date(2023, 1, 30), date(2023, 1, 31)}
+
+
+def test_a_day_already_held_keeps_its_first_copy(setup: tuple[Path, Path, Path]) -> None:
+    raw, current, history = setup
+    write_day(ratings_on(raw, 100), date(2023, 1, 30), history, current)
+    compact(history)
+    write_day(ratings_on(raw, 120), date(2023, 1, 30), history, current)
+
+    assert compact(history) == []
+
+    assert list((history / DAYS).iterdir()) == []
+    assert rows(f"SELECT date, count(*), max(votes) FROM {source(history)} GROUP BY 1") == [
+        (date(2023, 1, 30), 14, 100)
+    ]
+
+
+def test_days_waiting_to_be_folded_are_read_too(setup: tuple[Path, Path, Path]) -> None:
+    raw, current, history = setup
+    write_day(ratings_on(raw, 100), date(2023, 1, 30), history, current)
+    compact(history)
+    write_day(ratings_on(raw, 120), date(2023, 2, 1), history, current)
+
+    assert known_days(history) == {date(2023, 1, 30), date(2023, 2, 1)}
+    assert rows(f"SELECT count(DISTINCT date) FROM {source(history)}") == [(2,)]
 
 
 def test_an_empty_history_has_no_source(tmp_path: Path) -> None:

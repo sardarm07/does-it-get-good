@@ -26,7 +26,7 @@ getgood status                 # the tables, the history and the last syncs
 
 `sync` downloads only files IMDb has changed (about 292 MB the first time), checks them, and rebuilds `data/current.duckdb`: every scripted series and miniseries with 6 or more rated episodes, with their episodes and ratings. A file that fails a check stops the sync, and the tables from the last good sync are kept.
 
-Each sync also keeps that day's ratings in a history, `data/history/`, and fills in past days from the Internet Archive's copies of IMDb's ratings file, which go back to February 2022. The first backfill downloads about 10 GB, one file every few seconds, and takes several hours; stop it any time and the next sync carries on. The history takes about 1.5 GB on disk. Every sync is logged in `data/runs.jsonl`.
+Each sync also keeps that day's ratings in a history, `data/history/`, and fills in past days from the Internet Archive's copies of IMDb's ratings file, which go back to February 2022. The first backfill downloads about 10 GB, one file every few seconds, and takes several hours; stop it any time and the next sync carries on. The history takes under 1 GB on disk. Every sync is logged in `data/runs.jsonl`.
 
 The archive's copies are IMDb's own files, but using them sits in a gray area of IMDb's terms ("taken only from the datasets made available") and the archive's ("scholarship and research purposes"). `--no-history` leaves the archive alone; the history then starts from your first sync.
 
