@@ -1,0 +1,133 @@
+# Review bombs on IMDb since 2022 that the press documented, used to score getgood's bomb
+# detector with `make validate`. These are labels, not IMDb data. A bomb is found when the
+# show has a review-bomb event that touches one of its titles within its dates:
+#
+#   titles     "series" for the series page, an episode like S1E3, or a season like S4
+#              for any of its episodes
+#   from, to   the days the coverage places it, from the release to the last report
+#
+# A bomb whose dates the history holds no days for is reported but not scored.
+# The coverage often disputes how much was coordinated and how much honest dislike; the
+# notes say so where it does.
+
+- id: tt10857160
+  title: "She Hulk: Attorney at Law"
+  titles: [series]
+  from: 2022-08-15
+  to: 2022-08-31
+  note: >-
+    Rated 1 or 10 in near-equal shares around its premiere on 18 August 2022, the 1s
+    mostly from men over 30.
+  sources:
+    - https://thedirect.com/article/she-hulk-disney-review-bombed
+    - https://insidethemagic.net/2022/08/she-hulk-review-bombed-men-marvel-jc1/
+
+- id: tt7631058
+  title: "The Lord of the Rings: The Rings of Power"
+  titles: [series]
+  from: 2022-09-01
+  to: 2022-09-10
+  note: >-
+    Bombed on IMDb and Amazon at its premiere on 1 September 2022; Amazon paused user
+    reviews for 72 hours.
+  sources:
+    - https://theplaylist.net/lord-of-the-rings-rings-of-power-amazon-review-bombing-user-ratings-suspended-20220903/
+    - https://www.themarysue.com/why-is-the-rings-of-power-getting-review-bombed/
+
+- id: tt14153790
+  title: "Velma"
+  titles: [series]
+  from: 2023-01-12
+  to: 2023-02-09
+  note: >-
+    Among IMDb's lowest-rated series within weeks of its premiere on 12 January 2023, with
+    tens of thousands of 1s. Coverage disputes how much was bombing and how much dislike.
+  sources:
+    - https://thebrag.com/scooby-doo-reboot-velma-iworst-rating-show-imdb-history
+    - https://twinfinite.net/news/velma-claims-title-for-imdbs-worst-rated-animated-series-ever/
+
+- id: tt3581920
+  title: "The Last of Us"
+  titles: [S1E3]
+  from: 2023-01-29
+  to: 2023-02-05
+  note: >-
+    "Long, Long Time", aired 29 January 2023: over twice the votes of any other episode,
+    tens of thousands of them 1s, over its gay love story.
+  sources:
+    - https://slashfilm.com/1186175/the-last-of-us-episode-3-becomes-latest-victim-of-review-bombing-by-anti-gay-bigots
+    - https://www.insidehook.com/television/last-of-us-review-bombed
+    - https://thepinknews.com/2023/02/01/the-last-of-us-episode-3-gay-bill-frank-review-bombed
+
+- id: tt12262202
+  title: "The Acolyte"
+  titles: [series]
+  from: 2024-06-04
+  to: 2024-06-25
+  note: >-
+    Rated 1 by over half its voters in the weeks after its premiere on 4 June 2024.
+  sources:
+    - https://www.thepinknews.com/2024/06/25/the-acolyte-review-bombed-by-bigots-in-woke-backlash-why-is-it-getting-hate
+    - https://au.news.yahoo.com/acolyte-becomes-lowest-rated-star-123432336.html
+
+- id: tt15571732
+  title: "Agatha All Along"
+  titles: [series]
+  from: 2024-09-18
+  to: 2024-09-30
+  note: >-
+    About a fifth of its votes were 1s, few with a written review, after its premiere on
+    18 September 2024.
+  sources:
+    - https://thedirect.com/article/marvel-studios-agatha-all-along-review-bombed-2024-show
+    - https://thepinknews.com/2024/09/30/marvel-agatha-all-along-review-bombed
+
+- id: tt3581920
+  title: "The Last of Us"
+  titles: [S2E4]
+  from: 2025-05-04
+  to: 2025-05-12
+  note: >-
+    "Day One", aired 4 May 2025, became the series' lowest-rated episode, with 1 its most
+    common rating.
+  sources:
+    - https://www.moviejones.de/news/news-the-last-of-us-staffel-2-massives-review-bombing-ist-es-gerechtfertigt_49453.html
+    - https://insider-gaming.com/the-last-of-us-season-2-review-bomb-latest-episode/
+
+- id: tt13623126
+  title: "Ironheart"
+  titles: [series]
+  from: 2025-06-24
+  to: 2025-07-01
+  note: >-
+    44% of its IMDb votes were 1s in the hours after its premiere on 24 June 2025, after a
+    campaign that started on Rotten Tomatoes before release.
+  sources:
+    - https://www.sensacine.com/noticias/series/noticia-1000151776/
+    - https://www.newsletter.co.uk/whats-on/ironheart-marvel-rotten-tomatoes-review-bombing-5194853
+
+- id: tt5180504
+  title: "The Witcher"
+  titles: [series, S4]
+  from: 2025-10-30
+  to: 2025-11-10
+  note: >-
+    Season 4, released 30 October 2025 with Liam Hemsworth replacing Henry Cavill: its
+    episodes rated around 4 against 8 for earlier seasons. Coverage mixes bombing with
+    honest dislike of the season.
+  sources:
+    - https://bravo-www.soapcentral.com/shows/5-reasons-the-witcher-season-4-getting-worst-reviews-yet
+    - https://cosmicbook.news/witcher-season-4-viewership-drop-backlash
+
+- id: tt4574334
+  title: "Stranger Things"
+  titles: [S5E7]
+  from: 2025-12-25
+  to: 2026-01-07
+  note: >-
+    "The Bridge", released 25 December 2025, where Will comes out: 5.4 on IMDb, the only
+    episode below 7.8.
+  sources:
+    - https://au.variety.com/2025/tv/news/stranger-things-5-review-bombed-will-coming-out-episode-31477
+    - https://www.thewrap.com/creative-content/tv-shows/stranger-things-season-5-review-bombed-will-gay-coming-out/
+    - https://www.hollywoodreporter.com/tv/tv-news/stranger-things-season-5-review-bombed-will-gay-1236460308

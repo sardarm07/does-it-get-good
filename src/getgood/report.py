@@ -270,10 +270,7 @@ def answer(con: duckdb.DuckDBPyConnection, match: Match, history: Path | None = 
         Episode(season, number, rating_x10 / 10, votes)
         for season, number, rating_x10, votes in con.execute(EPISODES, [match.tid]).fetchall()
     )
-    labels = {match.tid: SERIES_PAGE} | {
-        tid: f"S{season}E{number}"
-        for tid, season, number in con.execute(TITLES, [match.tid]).fetchall()
-    }
+    labels = labels_of(con, match.tid)
     return Answer(
         as_of=scalar(con, "SELECT value FROM meta WHERE key = 'as_of'") or None,
         series=match,
@@ -282,13 +279,22 @@ def answer(con: duckdb.DuckDBPyConnection, match: Match, history: Path | None = 
         verdict=judge(episodes),
         contested=contested(episodes),
         labels=labels,
-        history=None if history is None else _history(con, history, labels),
+        history=None if history is None else history_of(con, history, labels),
     )
 
 
-def _history(
+def labels_of(con: duckdb.DuckDBPyConnection, series: int) -> dict[int, str]:
+    """Labels for a series' titles, in its order: the series page, then its episodes."""
+    return {series: SERIES_PAGE} | {
+        tid: f"S{season}E{number}"
+        for tid, season, number in con.execute(TITLES, [series]).fetchall()
+    }
+
+
+def history_of(
     con: duckdb.DuckDBPyConnection, history: Path, labels: Mapping[int, str]
 ) -> History | None:
+    """The events the history shows for the titles labelled, or None while it's empty."""
     relation = source(history)
     days = known_days(history)
     if relation is None or not days:
