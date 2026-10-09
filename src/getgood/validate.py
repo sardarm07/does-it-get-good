@@ -86,6 +86,14 @@ def check_files(raw_dir: Path, downloads: Sequence[Download], *, today: date) ->
     return report
 
 
+def check_copy(path: Path) -> list[Finding]:
+    """The blocking checks for one ratings file on its own, such as an archived copy:
+    header, readability, duplicate IDs, ratings and vote counts."""
+    copy = Download("title.ratings.tsv.gz", path, False, 0, None)
+    with duckdb.connect() as con:
+        return [f for f in _check(con, copy, None, Report()) if f.blocking]
+
+
 def remember_good(raw_dir: Path, downloads: Sequence[Download], report: Report) -> None:
     """Record row counts and dates, for the next sync to compare against."""
     if not report.ok:

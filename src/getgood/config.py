@@ -17,7 +17,7 @@ HISTORY_START = date(2022, 2, 22)
 """The Internet Archive's near-daily copies of IMDb's ratings file begin here."""
 MAX_GAP_DAYS = 3
 """History days further apart than this are reported as a gap."""
-ARCHIVE_PAUSE = 2.0
+ARCHIVE_PAUSE = 5.0
 """Seconds between requests to the Internet Archive, a non-profit."""
 ARCHIVE_WAITS = (60.0, 300.0, 900.0)
 """Seconds to wait before each retry after a 429, a 5xx, an offline page or a dropped

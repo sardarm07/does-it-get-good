@@ -8,8 +8,9 @@ from typing import Annotated
 import duckdb
 import typer
 
-from getgood import __version__
-from getgood.config import CURRENT_DB, DATA_DIR
+from getgood import __version__, archive
+from getgood.backfill import backfill, save_today, span
+from getgood.config import CURRENT_DB, DATA_DIR, MAX_GAP_DAYS
 from getgood.fetch import FetchError, fetch_all
 from getgood.load import build_current
 from getgood.report import answer
@@ -45,8 +46,18 @@ def main(
 
 
 @app.command()
-def sync(data_dir: DataDir = DATA_DIR) -> None:
-    """Download IMDb's latest files, check them, and rebuild the tables from them."""
+def sync(
+    data_dir: DataDir = DATA_DIR,
+    no_history: Annotated[
+        bool,
+        typer.Option(
+            "--no-history",
+            help="Don't fetch past days from the Internet Archive; history then grows only "
+            "from your own syncs.",
+        ),
+    ] = False,
+) -> None:
+    """Download IMDb's latest files, check them, rebuild the tables, and fill the history."""
     raw_dir = data_dir / "raw"
     try:
         downloads = fetch_all(raw_dir)
@@ -80,6 +91,25 @@ def sync(data_dir: DataDir = DATA_DIR) -> None:
         raise typer.Exit(1)
     state = "already up to date" if built.skipped else "built"
     typer.echo(f"Tables {state}: {built.series:,} series, {built.rated_episodes:,} rated episodes")
+
+    history, current = data_dir / "history", data_dir / CURRENT_DB
+    if (day := save_today(raw_dir, history, current, downloads)) is not None:
+        typer.echo(f"History: saved IMDb's file of {day}")
+    if not no_history:
+        with archive.client() as http:
+            filled = backfill(
+                http, history, current, data_dir / "archive", until=date.today(), say=typer.echo
+            )
+        if filled.added:
+            typer.echo(f"Archive: {len(filled.added):,} days added")
+        for skipped in filled.skipped:
+            typer.echo(f"Warning: archive {skipped}")
+        if filled.stopped:
+            typer.echo(
+                f"Warning: the archive stopped answering ({filled.stopped}). "
+                "Everything so far is kept, and the next sync carries on."
+            )
+    _print_history(history)
 
 
 @app.command()
@@ -125,6 +155,18 @@ def _choose(found: Found, name: str, *, ask: bool) -> Match:
         if 1 <= pick <= len(found.choices):
             return found.choices[pick - 1]
         typer.echo(f"Choose a number from 1 to {len(found.choices)}.")
+
+
+def _print_history(history: Path) -> None:
+    s = span(history)
+    if not s.days:
+        typer.echo("History: empty")
+        return
+    typer.echo(f"History: {s.days:,} days from {s.first} to {s.last}")
+    if s.gaps:
+        listed = ", ".join(f"{a} to {b}" for a, b in s.gaps[:5])
+        more = f" and {len(s.gaps) - 5} more" if len(s.gaps) > 5 else ""
+        typer.echo(f"  gaps of more than {MAX_GAP_DAYS} days: {listed}{more}")
 
 
 def _print_findings(findings: list[Finding]) -> None:

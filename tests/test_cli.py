@@ -8,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from getgood import __version__, cli
+from getgood.backfill import Backfill
 from getgood.cli import app
 from getgood.config import CURRENT_DB
 from getgood.fetch import Download, FetchError
@@ -55,9 +56,21 @@ def run_sync(
     def fake_build_current(raw_dir: Path, db_path: Path, downloads: Sequence[Download]) -> Build:
         return built or Build(series=2, rated_episodes=12)
 
+    def fake_save_today(*args: object) -> date | None:
+        return date(2026, 10, 9)
+
+    def fake_backfill(*args: object, **kwargs: object) -> Backfill:
+        archive_calls.append(kwargs)
+        return Backfill(added=[date(2023, 1, 30), date(2023, 1, 31)])
+
     monkeypatch.setattr(cli, "remember_good", fake_remember_good)
     monkeypatch.setattr(cli, "build_current", fake_build_current)
+    monkeypatch.setattr(cli, "save_today", fake_save_today)
+    monkeypatch.setattr(cli, "backfill", fake_backfill)
     return remembered
+
+
+archive_calls: list[dict[str, object]] = []
 
 
 def test_sync_reports_each_file_and_the_checks(
@@ -72,6 +85,9 @@ def test_sync_reports_each_file_and_the_checks(
         "title.episode.tsv.gz: unchanged (IMDb's file of 2026-10-09)",
         "Checks passed (1 file checked, 1 already checked)",
         "Tables built: 2 series, 12 rated episodes",
+        "History: saved IMDb's file of 2026-10-09",
+        "Archive: 2 days added",
+        "History: empty",
     ]
     assert len(remembered) == 1
 
@@ -200,3 +216,16 @@ def test_show_needs_a_sync_first(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "Run getgood sync first." in result.output
+
+
+def test_no_history_never_calls_the_archive(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    run_sync(monkeypatch, tmp_path, Report())
+    archive_calls.clear()
+
+    result = CliRunner().invoke(app, ["sync", "--no-history", "--data-dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert archive_calls == []
+    assert "History: saved IMDb's file of 2026-10-09" in result.output
