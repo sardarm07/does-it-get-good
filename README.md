@@ -4,7 +4,7 @@ Find the episode where a TV series gets good, where it slumps, and when it got r
 
 `getgood` is a command-line tool for personal use. It works from IMDb's free non-commercial datasets and keeps everything it downloads on your own machine.
 
-> **Status:** working towards v1. Verdicts, the rating history, review bombs and charts all work; the bomb thresholds are being checked against the full history before release.
+> **Status:** verdicts, the rating history, review bombs and charts all work. The bomb thresholds are being checked against the full history.
 
 ## Setup
 
@@ -68,7 +68,7 @@ Review bombs come from the history. Each day, every title's new votes are compar
 
 ```bash
 make test                      # ruff, pyright and pytest with coverage; analysis/ must stay at 90%
-make validate                  # score verdicts, bombs, search and speed against v1's targets (after a sync)
+make validate                  # score verdicts, bombs, search and speed against their targets (after a sync)
 make review                    # draw review-bomb events into validation/reviewed_events.yaml to mark
 make data                      # getgood sync --no-history
 make history                   # getgood sync
@@ -78,8 +78,6 @@ make backup BACKUP_DIR=/Volumes/Drive/getgood   # copy the history somewhere saf
 The history can be downloaded again only while the Internet Archive keeps its copies, so back it up now and then. Everything else in `data/` is rebuilt by a sync.
 
 Changes are committed to `main` once `make test` passes, and CI checks every push. Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/).
-
-Each milestone ends with a release: add its entry to `CHANGELOG.md`, bump the version in `pyproject.toml` and run `uv lock`, commit `chore(release): X.Y.Z`, then push an annotated tag `vX.Y.Z` and publish a GitHub Release with the changelog entry.
 
 ## Data and licence
 
