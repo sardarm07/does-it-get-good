@@ -19,6 +19,10 @@ def test_the_mean_is_weighted_by_votes() -> None:
     assert show_mean([8.0, 6.0], [300, 100]) == pytest.approx(7.5)
 
 
+def test_a_show_without_votes_takes_the_plain_mean() -> None:
+    assert show_mean([8.0, 6.0], [0, 0]) == pytest.approx(7.0)
+
+
 def test_ten_votes_move_an_episode_halfway_to_the_mean() -> None:
     r, v = [9.0, 7.0], [10, 1_000_000]
     c = show_mean(r, v)

@@ -6,6 +6,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from getgood.analysis.pelt import noise, objective, penalty, stretches
+from getgood.config import NOISE_FLOOR
 
 
 def brute_force(x: list[float], pen: float, premieres: list[int], min_size: int = 3) -> float:
@@ -84,3 +85,8 @@ def test_noise_comes_from_the_median_jump() -> None:
 
     assert noise(x) == pytest.approx(0.2 / (0.6745 * math.sqrt(2)))
     assert noise([8.0] * 10) == 0.05
+
+
+@pytest.mark.parametrize("x", [[], [7.5]])
+def test_too_few_ratings_to_measure_noise_get_the_floor(x: list[float]) -> None:
+    assert noise(x) == NOISE_FLOOR

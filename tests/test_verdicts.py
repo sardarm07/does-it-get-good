@@ -52,6 +52,17 @@ def test_a_short_peak_is_not_a_turn() -> None:
     assert (v.kind, v.at) == ("good_from_start", None)
 
 
+def test_a_rise_that_falls_back_within_six_episodes_is_not_the_turn() -> None:
+    v = judge(show((10, 6.0), (4, 8.0), (10, 6.0), (20, 7.5), per_season=44))
+
+    assert (v.kind, v.at) == ("gets_good", "S1E25")
+
+
+@pytest.mark.parametrize(("votes", "confidence"), [(10, "low"), (50, "medium"), (500, "high")])
+def test_without_a_jump_confidence_comes_from_the_votes(votes: int, confidence: str) -> None:
+    assert judge(show((20, 8.0), votes=votes)).confidence == confidence
+
+
 def test_a_small_rise_is_no_clear_turn() -> None:
     v = judge(show((100, 6.0), (100, 6.25)))
 

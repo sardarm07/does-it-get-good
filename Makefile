@@ -4,11 +4,14 @@ setup:  ## Install the Python dependencies and the pre-commit hooks
 	uv sync
 	uv run pre-commit install
 
-test:  ## Lint, type-check and test
+ANALYSIS_COVERAGE = 90
+
+test:  ## Lint, type-check, test, and hold analysis/ to its coverage floor
 	uv run ruff check
 	uv run ruff format --check
 	uv run pyright
-	uv run pytest
+	uv run pytest --cov
+	uv run coverage report --include="*/getgood/analysis/*" --fail-under=$(ANALYSIS_COVERAGE)
 
 validate:  ## Score verdicts and bombs against the labels in validation/, on local data
 	uv run python -m getgood.validation
