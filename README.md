@@ -36,6 +36,8 @@ Data lives in `data/` under the current directory, or wherever `GETGOOD_DATA` po
 getgood show "parks and rec"            # where it gets good, slumps and low points
 getgood show "the office" --year 2005   # choose between shows with the same name
 getgood show tt1234567 --json           # by IMDb ID, as JSON (see schema/answer.schema.json)
+getgood bombs                           # the biggest review bombs of the history's last 30 days
+getgood bombs --since 2023-01-01 --all  # since a date, with boosts and vote surges too
 ```
 
 The answer for a made-up show looks like this:
