@@ -1,0 +1,30 @@
+# IMDb data and anything derived from it: never committed
+data/
+*.tsv.gz
+*.parquet
+*.duckdb
+*.duckdb.wal
+
+# Planning documents stay out of the public repo (they quote real ratings)
+PROJECT_PLAN.*
+docs/images/
+~$*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Local settings
+.env
+
+# macOS
+.DS_Store
