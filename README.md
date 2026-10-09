@@ -52,6 +52,7 @@ Ratings with few votes are pulled toward the show's average before anything else
 
 ```bash
 make test                      # ruff, pyright and pytest
+make validate                  # score the verdicts against validation/turning_points.yaml (after a sync)
 ```
 
 Changes go through pull requests with green CI. Commit messages and PR titles follow [Conventional Commits](https://www.conventionalcommits.org/).
