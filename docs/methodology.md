@@ -84,7 +84,7 @@ from honest backlash, so it's never called a bomb.
 
 ## Review bombs
 
-Two checks find flags in the history; flags close together form events.
+Three checks find flags in the history; flags close together form events.
 
 **The daily check.** For every title with 500 or more votes, each day's new votes per day
 are compared with the title's own pace over its previous 28 history days (at least 7):
@@ -121,11 +121,25 @@ arrive (it holds a day within 3 days before the episode's first). On each of day
 review bomb. Season premieres are left out on both sides: they always draw more votes, and
 lower ratings, from people who don't go on.
 
+**The page check.** A show bombed at its premiere has no siblings to compare with, but
+bombers rate the series page without watching, so the page falls below its own episodes.
+For a series page the history saw arrive, each of days 1 to 13 compares the page with its
+episodes' vote-weighted rating that day. Most pages sit below their episodes anyway, since
+episode ratings come mostly from fans: across 74 launches in late 2022 the median page was
+0.4 below, and disliked shows sit lower still. So a page is flagged only when it rates 0.5
+or more below its episodes and the gap would take 10,000 or more low votes to open, the 1s
+it would take to drag the page from its episodes' rating to its own:
+
+    votes × (episodes' rating − page's rating) / (episodes' rating − 1)
+
+Of 25 launches with 8,000 or more page votes in their first two weeks, the three that the
+press documented as bombs (She-Hulk, The Rings of Power and Velma) needed 11,000 to 40,000;
+every other needed 5,800 or fewer.
+
 **Events.** Flags on one show no more than 2 days apart are one event, which is a review
 bomb if any flag is, otherwise a boost if any flag is. It's series-wide when it touches the
 series page or 3 or more episodes. Its size is the votes beyond the usual: daily surges add
-up, and a launch flag's lead over its siblings counts once per episode, since it repeats
-each day. `getgood bombs` lists the biggest, newest first; reading every show, it only
+up, while a launch or page flag's lead counts once per title, since it repeats each day. `getgood bombs` lists the biggest, newest first; reading every show, it only
 looks at titles with 500 or more votes today, since votes only grow.
 
 **What it can't see.** IMDb's files have no breakdown of votes by star, so a bomb whose
