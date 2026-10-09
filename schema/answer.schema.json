@@ -163,14 +163,14 @@
       }
     },
     "flag": {
-      "description": "One title on one day: a surge against its own pace, or a launch against its season's other episodes at the same age.",
+      "description": "One title on one day: a surge against its own pace (daily), an episode's launch against its season's other episodes at the same age (launch), or a series page's launch against its own episodes (page).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["title", "day", "launch", "votes", "rating", "rating_change", "extra_votes", "z", "ratio", "new_votes_rating"],
+      "required": ["title", "day", "check", "votes", "rating", "rating_change", "extra_votes", "z", "ratio", "new_votes_rating"],
       "properties": {
         "title": {"$ref": "#/$defs/title"},
         "day": {"type": "string", "format": "date"},
-        "launch": {"type": "boolean"},
+        "check": {"enum": ["daily", "launch", "page"]},
         "votes": {"type": "integer", "minimum": 0},
         "rating": {"type": "number", "minimum": 1, "maximum": 10},
         "rating_change": {"type": "number"},

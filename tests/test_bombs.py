@@ -5,7 +5,7 @@ import duckdb
 import numpy as np
 import pytest
 
-from getgood.analysis.bombs import Flag, Kind, find_flags, group, rank
+from getgood.analysis.bombs import Check, Flag, Kind, find_flags, group, rank
 from tests.helpers import Row, burst, day, season, steady
 
 SHOW = 1
@@ -58,7 +58,7 @@ def flag(
     kind: Kind = "bomb",
     *,
     show: int = SHOW,
-    launch: bool = False,
+    check: Check = "daily",
     extra: float = 100,
 ) -> Flag:
     return Flag(
@@ -66,7 +66,7 @@ def flag(
         show=show,
         day=day(n),
         kind=kind,
-        launch=launch,
+        check=check,
         votes=1_000,
         rating=7.0,
         rating_change=-0.5,
@@ -80,7 +80,7 @@ def test_a_burst_of_low_votes_is_a_bomb(con: duckdb.DuckDBPyConnection) -> None:
     [found] = flags(con, burst(rows, at=40, extra=600, rating=8.0))
 
     assert (found.tid, found.show, found.day, found.kind) == (101, 101, day(40), "bomb")
-    assert not found.launch
+    assert found.check == "daily"
     assert found.rating_change == -0.5
     assert found.extra_votes == 600  # 610 that day against its usual 10
     assert found.z == 600
@@ -200,7 +200,7 @@ def test_an_episode_far_ahead_of_its_season_at_launch_is_a_bomb(
 
     # episode 3 arrives on day 24 and is compared at ages 1 to 13
     assert [f.day for f in found] == [day(n) for n in range(25, 38)]
-    assert {(f.tid, f.show, f.kind, f.launch) for f in found} == {(103, SHOW, "bomb", True)}
+    assert {(f.tid, f.show, f.kind, f.check) for f in found} == {(103, SHOW, "bomb", "launch")}
     first = found[0]
     assert first.votes == 5_000
     assert first.ratio == pytest.approx(5_000 / 1_500)
@@ -224,6 +224,44 @@ def test_an_episode_that_arrived_unseen_is_not_compared(con: duckdb.DuckDBPyConn
     rows, episodes = five_episodes(bombed=3)
     # the history misses days 20 to 23, so episode 3 might have arrived any time after day 19
     rows = [r for r in rows if not day(20) <= r[1] <= day(23)]
+
+    assert flags(con, rows, episodes) == []
+
+
+def launch_week(
+    page_votes: int, page_rating: float
+) -> tuple[list[Row], list[tuple[int, int, int, int]]]:
+    """A series page and three episodes arriving on day 10, watched through day 30, with
+    another show in the history from day 0, so their arrival is seen."""
+    rows = steady(999, range(31), votes=5_000, pace=10, rating=8.0)
+    rows += steady(SHOW, range(10, 31), votes=page_votes, pace=page_votes // 4, rating=page_rating)
+    for k, rating in enumerate((7.5, 7.4, 7.6), 1):
+        rows += steady(100 + k, range(10, 31), votes=4_000 // k, pace=800 // k, rating=rating)
+    return rows, [(100 + k, SHOW, 1, k) for k in (1, 2, 3)]
+
+
+def test_a_series_page_far_below_its_episodes_on_a_crowd_is_a_bomb(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    rows, episodes = launch_week(page_votes=20_000, page_rating=5.0)
+
+    found = flags(con, rows, episodes)
+
+    # the gap needs 10,000 low votes from day 12, at 30,000 votes, to day 23, the last of
+    # its first 14 days
+    assert [f.day for f in found] == [day(n) for n in range(12, 24)]
+    assert {(f.tid, f.show, f.kind, f.check) for f in found} == {(SHOW, SHOW, "bomb", "page")}
+    first = found[0]
+    assert first.votes == 30_000
+    assert first.rating_change == pytest.approx(5.0 - 7.5, abs=0.06)
+    assert first.extra_votes == pytest.approx(30_000 * 2.5 / 6.5, rel=0.03)
+
+
+@pytest.mark.parametrize(("page_votes", "page_rating"), [(2_000, 5.0), (20_000, 7.2)])
+def test_a_small_crowd_or_a_modest_gap_is_no_page_bomb(
+    con: duckdb.DuckDBPyConnection, page_votes: int, page_rating: float
+) -> None:
+    rows, episodes = launch_week(page_votes, page_rating)
 
     assert flags(con, rows, episodes) == []
 
@@ -258,7 +296,7 @@ def test_an_event_takes_its_most_serious_kind() -> None:
 
 def test_daily_surges_add_up_and_a_launch_lead_counts_once() -> None:
     daily = [flag(101, 20, extra=300), flag(101, 21, extra=200)]
-    launch = [flag(102, n, launch=True, extra=1_000 + n) for n in (20, 21, 22)]
+    launch = [flag(102, n, check="launch", extra=1_000 + n) for n in (20, 21, 22)]
 
     [event] = group(daily + launch)
 

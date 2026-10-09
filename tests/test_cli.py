@@ -242,7 +242,7 @@ def test_show_json_includes_the_history_and_matches_the_schema(bombed: Path) -> 
     assert event["flags"][0] == {
         "title": "S1E3",
         "day": "2023-01-26",
-        "launch": True,
+        "check": "launch",
         "votes": 5_000,
         "rating": 7.0,
         "rating_change": -2.05,  # against E2 and E4 to E6, the premiere left out

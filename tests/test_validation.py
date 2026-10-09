@@ -94,7 +94,7 @@ LABELS = {SHOW: SERIES_PAGE, 11: "S1E1", 12: "S1E2", 41: "S4E1", 42: "S4E2"}
 
 def event(tid: int, first: int, last: int, kind: Kind = "bomb") -> Event:
     flags = [
-        Flag(tid, SHOW, day(n), kind, False, 1_000, 6.0, -0.5, 500.0, z=20.0)
+        Flag(tid, SHOW, day(n), kind, "daily", 1_000, 6.0, -0.5, 500.0, z=20.0)
         for n in range(first, last + 1)
     ]
     [e] = group(flags)

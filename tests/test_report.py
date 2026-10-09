@@ -17,7 +17,7 @@ def surge(
         show=SHOW,
         day=day(n),
         kind=kind,
-        launch=False,
+        check="daily",
         votes=20_000,
         rating=7.5,
         rating_change=change,

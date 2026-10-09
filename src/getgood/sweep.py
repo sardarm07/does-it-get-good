@@ -5,7 +5,15 @@ from datetime import date, timedelta
 
 import duckdb
 
-from getgood.analysis.bombs import Event, Flag, daily_flags, group, launch_flags, rank
+from getgood.analysis.bombs import (
+    Event,
+    Flag,
+    daily_flags,
+    group,
+    launch_flags,
+    page_flags,
+    rank,
+)
 from getgood.config import BASELINE_DAYS, LAUNCH_DAYS, MIN_BOMB_VOTES
 from getgood.report import CREDIT, SERIES_PAGE, what, when
 from getgood.search import Match
@@ -59,6 +67,7 @@ def sweep(
     flags += launch_flags(
         con, history, "episodes", days, where=VOTED_SEASONS, since=since, until=until
     )
+    flags += page_flags(con, history, "episodes", days, where=VOTED, since=since, until=until)
     return group(flags)
 
 

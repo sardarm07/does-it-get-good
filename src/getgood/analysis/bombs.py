@@ -1,6 +1,6 @@
 """Review bombs: bursts of votes that move a rating, found in the history.
 
-Two checks, both in SQL over the history, so one show and every show use the same code:
+Three checks, all in SQL over the history, so one show and every show use the same code:
 
 - Daily: a title with 500+ votes, at least 14 days into the history and not arriving (its
   votes don't grow fivefold within 14 days either side), is compared with its own pace over
@@ -11,6 +11,9 @@ Two checks, both in SQL over the history, so one show and every show use the sam
   its season's other episodes at the same age. Far more votes and a far lower rating is a
   bomb. Season premieres are left out on both sides: they always draw extra votes, and
   lower ratings, from people who don't go on.
+- Page: a series page in its first 14 days is compared with its own episodes. Bombers rate
+  the page without watching, so it falls below the episodes; it's a bomb when the gap is
+  wide and takes a crowd of low votes to explain.
 
 Flags on one show within 2 days of each other form one event.
 """
@@ -26,6 +29,7 @@ import duckdb
 from getgood.config import (
     ARRIVAL_GROWTH,
     BASELINE_DAYS,
+    CONTESTED_NEIGHBOUR_VOTES,
     EVENT_DAYS,
     LAUNCH_DAYS,
     LAUNCH_DROP,
@@ -34,6 +38,8 @@ from getgood.config import (
     MIN_BASELINE_DAYS,
     MIN_BOMB_VOTES,
     NEW_VOTES_ERROR,
+    PAGE_DROP,
+    PAGE_EXCESS,
     SERIES_WIDE_EPISODES,
     SHOCK_DROP,
     SURGE_MIN_SHARE,
@@ -43,6 +49,7 @@ from getgood.config import (
 
 type Kind = Literal["bomb", "boost", "suspicious"]
 KINDS: tuple[Kind, ...] = ("bomb", "boost", "suspicious")
+type Check = Literal["daily", "launch", "page"]
 SHOCK_X10 = round(SHOCK_DROP * 10)
 
 # Ratings are compared in tenths, as integers, so 8.3 - 8.5 is exactly -0.2.
@@ -150,6 +157,51 @@ LAUNCH = f"""
       AND ($until IS NULL OR date <= $until)
 """
 
+# Series pages the history saw arrive, against their episodes' vote-weighted rating on the
+# same day. The excess is the 1s it would take to drag the page from the episodes' rating
+# to its own: votes x (episodes - page) / (episodes - 1), the ratings in tenths.
+PAGE = f"""
+    WITH pages AS (
+        SELECT tid, min(date) AS first_day
+        FROM {{history}}
+        WHERE {{where}} AND tid IN (SELECT series FROM {{episodes}})
+        GROUP BY tid
+    ),
+    observed AS (
+        SELECT p.tid, p.first_day
+        FROM pages p
+        WHERE EXISTS (
+            SELECT 1 FROM (SELECT unnest(CAST($days AS DATE[])) AS date) d
+            WHERE d.date < p.first_day AND d.date >= p.first_day - {MAX_GAP_DAYS}
+        )
+    ),
+    page_days AS (
+        SELECT h.tid, h.date, CAST(h.rating_x10 AS INTEGER) AS rating_x10,
+               CAST(h.votes AS BIGINT) AS votes
+        FROM {{history}} h JOIN observed o USING (tid)
+        WHERE h.date - o.first_day BETWEEN 1 AND {LAUNCH_DAYS - 1}
+    ),
+    episode_days AS (
+        SELECT e.series AS tid, h.date,
+               sum(CAST(h.rating_x10 AS BIGINT) * h.votes) / sum(h.votes) AS rating_x10,
+               sum(h.votes) AS votes
+        FROM {{history}} h
+        JOIN {{episodes}} e ON e.tid = h.tid
+        JOIN observed o ON o.tid = e.series
+        WHERE h.date - o.first_day BETWEEN 1 AND {LAUNCH_DAYS - 1}
+        GROUP BY ALL
+    )
+    SELECT p.tid, p.date, p.votes, p.rating_x10, e.rating_x10 AS episodes_x10,
+           p.votes * (e.rating_x10 - p.rating_x10) / (e.rating_x10 - 10) AS excess
+    FROM page_days p JOIN episode_days e USING (tid, date)
+    WHERE p.votes >= {MIN_BOMB_VOTES}
+      AND e.votes >= {CONTESTED_NEIGHBOUR_VOTES}
+      AND p.rating_x10 <= e.rating_x10 - {round(PAGE_DROP * 10)}
+      AND p.votes * (e.rating_x10 - p.rating_x10) / (e.rating_x10 - 10) >= {PAGE_EXCESS}
+      AND ($since IS NULL OR p.date >= $since)
+      AND ($until IS NULL OR p.date <= $until)
+"""
+
 
 @dataclass(frozen=True)
 class Flag:
@@ -160,13 +212,15 @@ class Flag:
     """The series the title belongs to: its own ID for the series page."""
     day: date
     kind: Kind
-    launch: bool
+    check: Check
     votes: int
     rating: float
     rating_change: float
-    """Daily: since the previous history day. Launch: against its siblings' median."""
+    """Daily: since the previous history day. Launch: against its siblings' median. Page:
+    against its own episodes' rating."""
     extra_votes: float
-    """Daily: votes above the title's usual pace. Launch: above its siblings' median."""
+    """Daily: votes above the title's usual pace. Launch: above its siblings' median. Page:
+    the low votes it would take to open its gap below its episodes."""
     z: float | None = None
     """Daily: how many robust standard deviations the day's pace is above the usual."""
     ratio: float | None = None
@@ -201,7 +255,7 @@ def find_flags(
     since: date | None = None,
     until: date | None = None,
 ) -> list[Flag]:
-    """Every daily and launch flag between since and until, in date order.
+    """Every daily, launch and page flag between since and until, in date order.
 
     The history and the episodes (tid, series, season, episode) are SQL relations; days are
     every day the history holds. `where` must keep whole titles' histories: each title's
@@ -209,6 +263,7 @@ def find_flags(
     """
     found = daily_flags(con, history, episodes, where=where, since=since, until=until)
     found += launch_flags(con, history, episodes, days, where=where, since=since, until=until)
+    found += page_flags(con, history, episodes, days, where=where, since=since, until=until)
     return sorted(found, key=lambda f: (f.day, f.show, f.tid))
 
 
@@ -240,7 +295,7 @@ def daily_flags(
                 show=show,
                 day=day,
                 kind=kind,
-                launch=False,
+                check="daily",
                 votes=votes,
                 rating=rating_x10 / 10,
                 rating_change=dr_x10 / 10,
@@ -279,12 +334,48 @@ def launch_flags(
                 show=show,
                 day=day,
                 kind="bomb",
-                launch=True,
+                check="launch",
                 votes=votes,
                 rating=rating_x10 / 10,
                 rating_change=(rating_x10 - siblings_x10) / 10,
                 extra_votes=votes - siblings_votes,
                 ratio=votes / siblings_votes,
+            )
+        )
+    return found
+
+
+def page_flags(
+    con: duckdb.DuckDBPyConnection,
+    history: str,
+    episodes: str,
+    days: Collection[date],
+    *,
+    where: str = "true",
+    since: date | None = None,
+    until: date | None = None,
+) -> list[Flag]:
+    """Each day of a series page's first two weeks that it rated far below its own episodes,
+    by a gap only a crowd of low votes explains.
+
+    `where` must keep the series pages' whole histories; their episodes are read whole.
+    """
+    found: list[Flag] = []
+    sql = PAGE.format(history=history, episodes=episodes, where=where)
+    for tid, day, votes, rating_x10, episodes_x10, excess in con.execute(
+        sql, {"since": since, "until": until, "days": sorted(days)}
+    ).fetchall():
+        found.append(
+            Flag(
+                tid=tid,
+                show=tid,
+                day=day,
+                kind="bomb",
+                check="page",
+                votes=votes,
+                rating=rating_x10 / 10,
+                rating_change=(rating_x10 - episodes_x10) / 10,
+                extra_votes=excess,
             )
         )
     return found
@@ -317,12 +408,12 @@ def _event(show: int, flags: list[Flag]) -> Event:
     kind: Kind = next(k for k in KINDS if k in present)
     titles = tuple(dict.fromkeys(f.tid for f in flags))
     episodes = [t for t in titles if t != show]
-    # A day's surge adds to the next day's; a launch flag repeats the same lead each day.
-    daily = sum(f.extra_votes for f in flags if not f.launch)
-    launch: dict[int, float] = defaultdict(float)
+    # A day's surge adds to the next day's; launch and page flags repeat one lead each day.
+    daily = sum(f.extra_votes for f in flags if f.check == "daily")
+    lead: dict[int, float] = defaultdict(float)
     for f in flags:
-        if f.launch:
-            launch[f.tid] = max(launch[f.tid], f.extra_votes)
+        if f.check != "daily":
+            lead[f.tid] = max(lead[f.tid], f.extra_votes)
     return Event(
         show=show,
         start=flags[0].day,
@@ -330,6 +421,6 @@ def _event(show: int, flags: list[Flag]) -> Event:
         kind=kind,
         titles=titles,
         series_wide=show in titles or len(episodes) >= SERIES_WIDE_EPISODES,
-        extra_votes=daily + sum(launch.values()),
+        extra_votes=daily + sum(lead.values()),
         flags=tuple(flags),
     )

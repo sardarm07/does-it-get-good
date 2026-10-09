@@ -121,6 +121,13 @@ LAUNCH_RATIO = 3.0
 same age..."""
 LAUNCH_DROP = 0.5
 """...with a rating at least this far below theirs."""
+PAGE_DROP = 0.5
+"""A series page at launch flagged when it rates at least this far below its own episodes..."""
+PAGE_EXCESS = 10_000
+"""...and that gap takes at least this many low votes: the 1s it would take to drag the page
+from its episodes' rating to its own. Episode ratings come mostly from fans, so most pages
+sit below their episodes; it takes a crowd that rated the page without the episodes to
+open a gap this wide on this many votes."""
 EVENT_DAYS = 2
 """Flags on one show this close together are one event."""
 RECENT_DAYS = 30

@@ -158,7 +158,7 @@ class Answer:
         return {
             "title": self.label(f.tid),
             "day": f.day.isoformat(),
-            "launch": f.launch,
+            "check": f.check,
             "votes": f.votes,
             "rating": f.rating,
             "rating_change": f.rating_change,
@@ -233,7 +233,15 @@ def when(e: Event) -> str:
 def what(e: Event, labels: Mapping[int, str]) -> str:
     """The titles an event touched and what happened to them, in one line."""
     effects: list[str] = []
-    launch = [f for f in e.flags if f.launch]
+    page = [f for f in e.flags if f.check == "page"]
+    if page:
+        gap = min(f.rating_change for f in page)
+        excess = max(f.extra_votes for f in page)
+        effects.append(
+            f"at launch, rated up to {-gap:.1f} below its own episodes, "
+            f"as if {excess:,.0f} low votes had been added"
+        )
+    launch = [f for f in e.flags if f.check == "launch"]
     if launch:
         ratio = max(f.ratio or 0.0 for f in launch)
         gap = min(f.rating_change for f in launch)
@@ -241,7 +249,7 @@ def what(e: Event, labels: Mapping[int, str]) -> str:
             f"at launch, up to {ratio:.1f}× the votes of its season's other episodes "
             f"and {-gap:.1f} below their rating"
         )
-    daily = [f for f in e.flags if not f.launch]
+    daily = [f for f in e.flags if f.check == "daily"]
     if daily:
         change: dict[int, float] = defaultdict(float)
         for f in daily:
