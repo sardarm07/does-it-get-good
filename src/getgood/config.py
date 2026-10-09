@@ -60,6 +60,22 @@ PENALTY_FACTOR = 3.0
 NOISE_FLOOR = 0.05
 """Smallest episode-to-episode noise assumed; ratings are rounded to 0.1."""
 
+GOOD_BAR = 8.1
+"""A show opening above this is good from the start: the 75th percentile of show medians."""
+RISE = 0.3
+"""A step up at least this big, to the show's level, is where it gets good."""
+MIN_TURN_EPISODES = 6
+"""A step up must hold for this many episodes to count: a short peak isn't a turn."""
+NEAR_MEDIAN = 0.1
+"""Within this of the show's median counts as its usual level."""
+SLUMP_DROP = 0.4
+"""A later stretch at least this far below the show's median is a slump."""
+LOW_POINT_SIGMAS = 3.0
+"""A single episode this many noise widths below its stretch is a low point."""
+HIGH_CONFIDENCE_VOTES = 100
+"""Median votes per episode behind a high-confidence verdict."""
+MEDIUM_CONFIDENCE_VOTES = 20
+
 SCOPE_SIZE_TOLERANCE = 0.03
 """How far the number of in-scope series may move between syncs, per ROW_COUNT_PERIOD_DAYS."""
 LOST_VOTES_TOLERANCE = 0.01
