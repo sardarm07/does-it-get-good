@@ -1,0 +1,167 @@
+# Turning points that fans widely agree on, used to score getgood's verdicts with
+# `make validate`. These are labels, not IMDb data. A show passes when every fact listed
+# for it holds:
+#
+#   gets_good_at     the verdict is "gets good", within 3 episodes of this one
+#   good_from_start  the verdict is "good from the start" or "steady"
+#   slump_from       a slump starts within 3 episodes of this one
+#   low_point        a low point falls within 1 episode of this one
+#
+# Shows without one agreed turning point, such as Seinfeld (fans name season 2, 3 or 4),
+# are left out on purpose.
+
+- id: tt1266020
+  title: "Parks and Recreation"
+  gets_good_at: S2E1
+  note: "The six-episode first season is widely called skippable."
+
+- id: tt0092455
+  title: "Star Trek: The Next Generation"
+  gets_good_at: S3E1
+  note: "The usual advice is that it finds its feet in season 3."
+
+- id: tt0386676
+  title: "The Office (US)"
+  gets_good_at: S2E1
+  note: "The six-episode first season is widely called skippable."
+
+- id: tt0105946
+  title: "Babylon 5"
+  gets_good_at: S2E1
+  note: "Fans tell newcomers to push through season 1; season 2 is where it takes off."
+
+- id: tt2364582
+  title: "Agents of S.H.I.E.L.D."
+  gets_good_at: S1E17
+  note: "“Turn, Turn, Turn”, the Hydra reveal tied to The Winter Soldier, is the cited turn."
+
+- id: tt1119644
+  title: "Fringe"
+  gets_good_at: S1E11
+  note: "It improves about halfway through season 1, when the Pattern storyline takes over."
+
+- id: tt0903747
+  title: "Breaking Bad"
+  good_from_start: true
+
+- id: tt4955642
+  title: "The Good Place"
+  good_from_start: true
+
+- id: tt0108778
+  title: "Friends"
+  good_from_start: true
+
+- id: tt3032476
+  title: "Better Call Saul"
+  good_from_start: true
+
+- id: tt4574334
+  title: "Stranger Things"
+  good_from_start: true
+
+- id: tt1865718
+  title: "Gravity Falls"
+  good_from_start: true
+
+- id: tt2467372
+  title: "Brooklyn Nine-Nine"
+  good_from_start: true
+
+- id: tt0306414
+  title: "The Wire"
+  good_from_start: true
+
+- id: tt0141842
+  title: "The Sopranos"
+  good_from_start: true
+
+- id: tt0944947
+  title: "Game of Thrones"
+  good_from_start: true
+  slump_from: S8E1
+  note: "The final season is the one fans agree went wrong."
+
+- id: tt0773262
+  title: "Dexter"
+  good_from_start: true
+  slump_from: S8E1
+  note: "The final season and its finale are widely panned."
+
+- id: tt0411008
+  title: "Lost"
+  good_from_start: true
+  slump_from: S3E1
+  note: "The first six episodes of season 3, mostly in the cages, are the agreed dip."
+
+- id: tt0813715
+  title: "Heroes"
+  good_from_start: true
+  slump_from: S2E1
+  note: "Season 1 is loved; the drop from season 2 on is the standard example of a decline."
+
+- id: tt0285403
+  title: "Scrubs"
+  good_from_start: true
+  slump_from: S9E1
+  note: "Season 9, the medical-school reboot, is the one fans disown."
+
+- id: tt1475582
+  title: "Sherlock"
+  good_from_start: true
+  slump_from: S4E1
+  note: "Season 4 is the agreed low."
+
+- id: tt0475784
+  title: "Westworld"
+  good_from_start: true
+  slump_from: S3E1
+  note: "Seasons 3 and 4 lost much of the audience."
+
+- id: tt0165598
+  title: "That '70s Show"
+  good_from_start: true
+  slump_from: S8E1
+  note: "The last season, without Eric, is the agreed slump."
+
+- id: tt0369179
+  title: "Two and a Half Men"
+  good_from_start: true
+  slump_from: S9E1
+  note: "The seasons after Charlie Sheen left are rated far lower."
+
+- id: tt0367279
+  title: "Arrested Development"
+  good_from_start: true
+  slump_from: S4E1
+  note: "The 2013 revival season split fans; the first three seasons are the classic."
+
+- id: tt2356777
+  title: "True Detective"
+  good_from_start: true
+  slump_from: S2E1
+  note: "Season 2 is the agreed drop after the first."
+
+- id: tt1439629
+  title: "Community"
+  good_from_start: true
+  slump_from: S4E1
+  note: "Season 4, made without its creator, is the “gas leak year”; it recovers in season 5."
+
+- id: tt1856010
+  title: "House of Cards"
+  good_from_start: true
+  slump_from: S6E1
+  note: "The final season, without Kevin Spacey, is the agreed low."
+
+- id: tt0238784
+  title: "Gilmore Girls"
+  good_from_start: true
+  slump_from: S7E1
+  note: "Season 7, made without its creators, is the agreed slump."
+
+- id: tt0460649
+  title: "How I Met Your Mother"
+  good_from_start: true
+  low_point: S9E23
+  note: "The two-part finale, “Last Forever”, is among the most disliked finales."
