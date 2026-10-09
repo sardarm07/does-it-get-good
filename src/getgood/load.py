@@ -20,7 +20,7 @@ from getgood.validate import Finding, allowance, apart, days_between
 
 BASICS, EPISODE, RATINGS = IMDB_FILES
 
-BUILD_VERSION = "2"
+BUILD_VERSION = "3"
 """Bump when the tables change for the same IMDb files, so the next sync rebuilds them."""
 
 SEARCH_KEY = (
@@ -104,7 +104,7 @@ def _create_tables(con: duckdb.DuckDBPyConnection, raw_dir: Path) -> None:
         FROM all_episodes e
         JOIN all_ratings r USING (tid)
         JOIN all_series s ON s.tid = e.series
-        WHERE e.season >= 1 AND e.episode IS NOT NULL
+        WHERE e.season >= 1 AND e.episode >= 1
           AND NOT list_has_any(string_split(coalesce(s.genres, ''), ','), {excluded})
         GROUP BY e.series
         HAVING count(*) >= {MIN_RATED_EPISODES}""")
@@ -118,7 +118,7 @@ def _create_tables(con: duckdb.DuckDBPyConnection, raw_dir: Path) -> None:
         CREATE TABLE episodes AS
         SELECT e.tid, e.series, e.season, e.episode
         FROM all_episodes e JOIN scope s ON s.tid = e.series
-        WHERE e.season >= 1 AND e.episode IS NOT NULL
+        WHERE e.season >= 1 AND e.episode >= 1
         ORDER BY e.series, e.season, e.episode, e.tid""")
     con.execute("""
         CREATE TABLE ratings AS

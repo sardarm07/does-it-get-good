@@ -50,7 +50,7 @@ class Slump:
     start: str
     end: str
     delta: float
-    """The slump's level minus the show's median."""
+    """The slump's level minus the show's level before it."""
     recovered: bool
 
 
@@ -75,7 +75,8 @@ def judge(episodes: Sequence[Episode]) -> Verdict:
     x = damp([e.rating for e in episodes], [e.votes for e in episodes])
     sigma = noise(x)
     median = float(np.median(x))
-    ends = stretches(x)
+    premieres = [i for i in range(1, len(episodes)) if episodes[i].season != episodes[i - 1].season]
+    ends = stretches(x, premieres=premieres)
     parts = tuple(
         Stretch(start, end, float(x[start:end].mean()))
         for start, end in zip([0, *ends[:-1]], ends, strict=True)
@@ -89,7 +90,7 @@ def judge(episodes: Sequence[Episode]) -> Verdict:
         median=median,
         sigma=sigma,
         stretches=parts,
-        slumps=_slumps(episodes, parts, median),
+        slumps=_slumps(episodes, x, parts),
         low_points=_low_points(episodes, x, parts, sigma),
         damped=tuple(float(v) for v in x),
     )
@@ -176,20 +177,35 @@ def _held(parts: tuple[Stretch, ...], i: int, floor: float) -> int:
 
 
 def _slumps(
-    episodes: Sequence[Episode], parts: tuple[Stretch, ...], median: float
+    episodes: Sequence[Episode], x: NDArray[np.float64], parts: tuple[Stretch, ...]
 ) -> tuple[Slump, ...]:
+    """Later stretches well below the show's level before them: the mean of every earlier
+    episode, so a decline that fills most of a run still counts. Back-to-back slumping
+    stretches are one slump, measured from the level before it began."""
+    slumping = [
+        i
+        for i, part in enumerate(parts)
+        if i > 0 and part.level <= float(x[: part.start].mean()) - SLUMP_DROP
+    ]
+    runs: list[list[int]] = []
+    for i in slumping:
+        if runs and runs[-1][-1] == i - 1:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+
     found: list[Slump] = []
-    for i, part in enumerate(parts[1:], start=1):
-        if part.level <= median - SLUMP_DROP:
-            recovered = any(p.level >= median - NEAR_MEDIAN for p in parts[i + 1 :])
-            found.append(
-                Slump(
-                    start=episodes[part.start].label,
-                    end=episodes[part.end - 1].label,
-                    delta=part.level - median,
-                    recovered=recovered,
-                )
+    for run in runs:
+        start, end = parts[run[0]].start, parts[run[-1]].end
+        before = float(x[:start].mean())
+        found.append(
+            Slump(
+                start=episodes[start].label,
+                end=episodes[end - 1].label,
+                delta=float(x[start:end].mean()) - before,
+                recovered=any(p.level >= before - NEAR_MEDIAN for p in parts[run[-1] + 1 :]),
             )
+        )
     return tuple(found)
 
 

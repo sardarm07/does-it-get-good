@@ -57,6 +57,9 @@ MIN_STRETCH = 3
 """Episodes in the shortest flat stretch PELT may find."""
 PENALTY_FACTOR = 3.0
 """Each extra break costs PENALTY_FACTOR * sigma^2 * ln(n), so noise alone makes no breaks."""
+PREMIERE_DISCOUNT = 0.5
+"""A break where a season begins costs this share of the usual penalty: shows change most
+between seasons. Tuned on the validation set; pure noise still stays one stretch 9 times in 10."""
 NOISE_FLOOR = 0.05
 """Smallest episode-to-episode noise assumed; ratings are rounded to 0.1."""
 
@@ -69,7 +72,7 @@ MIN_TURN_EPISODES = 6
 NEAR_MEDIAN = 0.1
 """Within this of the show's median counts as its usual level."""
 SLUMP_DROP = 0.4
-"""A later stretch at least this far below the show's median is a slump."""
+"""A later stretch at least this far below the show's level before it is a slump."""
 LOW_POINT_SIGMAS = 3.0
 """A single episode this many noise widths below its stretch is a low point."""
 HIGH_CONFIDENCE_VOTES = 100

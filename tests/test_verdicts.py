@@ -1,17 +1,7 @@
-from getgood.analysis.verdicts import Episode, Slump, judge
+import pytest
 
-
-def show(
-    *runs: tuple[int, float], per_season: int = 10, votes: int = 10_000, ripple: float = 0.2
-) -> list[Episode]:
-    """Episodes in order: each run is (count, level), with ratings alternating +-ripple."""
-    levels = [level for count, level in runs for _ in range(count)]
-    return [
-        Episode(
-            i // per_season + 1, i % per_season + 1, level + (ripple if i % 2 else -ripple), votes
-        )
-        for i, level in enumerate(levels)
-    ]
+from getgood.analysis.verdicts import Slump, judge
+from tests.helpers import show
 
 
 def test_one_stretch_is_steady() -> None:
@@ -42,7 +32,10 @@ def test_a_show_that_opens_at_its_level_is_good_from_the_start() -> None:
     v = judge(show((10, 9.0), (10, 8.0)))
 
     assert (v.kind, v.at) == ("good_from_start", None)
-    assert v.slumps == (Slump("S2E1", "S2E10", v.stretches[1].level - v.median, recovered=False),)
+    level_before = v.stretches[0].level
+    assert v.slumps == (
+        Slump("S2E1", "S2E10", v.stretches[1].level - level_before, recovered=False),
+    )
 
 
 def test_a_lasting_rise_makes_it_even_better() -> None:
@@ -73,10 +66,10 @@ def test_a_slump_that_climbs_back_is_recovered() -> None:
 
 
 def test_one_awful_episode_is_a_low_point_not_a_stretch() -> None:
-    v = judge(show((10, 8.0), (1, 5.0), (10, 8.0)))
+    v = judge(show((10, 8.0), (1, 5.0), (10, 8.0), per_season=30))
 
     assert v.kind == "steady"
-    assert v.low_points == ("S2E1",)
+    assert v.low_points == ("S1E11",)
 
 
 def test_few_votes_before_the_turn_lower_confidence() -> None:
@@ -87,3 +80,10 @@ def test_a_rise_smaller_than_the_noise_has_low_confidence() -> None:
     v = judge(show((400, 7.5), (400, 7.9), ripple=0.5))
 
     assert (v.kind, v.confidence) == ("gets_good", "low")
+
+
+def test_back_to_back_slumping_stretches_are_one_slump() -> None:
+    v = judge(show((20, 8.6), (10, 7.8), (10, 6.8)))
+
+    assert [(s.start, s.end, s.recovered) for s in v.slumps] == [("S3E1", "S4E10", False)]
+    assert v.slumps[0].delta == pytest.approx((7.8 + 6.8) / 2 - 8.6, abs=0.01)

@@ -8,14 +8,14 @@ from hypothesis import strategies as st
 from getgood.analysis.pelt import noise, objective, penalty, stretches
 
 
-def brute_force(x: list[float], pen: float, min_size: int = 3) -> float:
+def brute_force(x: list[float], pen: float, premieres: list[int], min_size: int = 3) -> float:
     """The lowest objective over every split into stretches of at least min_size."""
     n, best = len(x), math.inf
 
     def search(start: int, ends: list[int]) -> None:
         nonlocal best
         if start == n:
-            best = min(best, objective(x, ends, pen))
+            best = min(best, objective(x, ends, pen, premieres))
             return
         for end in range(start + min_size, n + 1):
             if end == n or n - end >= min_size:
@@ -39,6 +39,22 @@ def test_pure_noise_is_usually_one_stretch() -> None:
     assert sum(r == [60] for r in runs) / len(runs) >= 0.9
 
 
+def test_cheaper_breaks_at_premieres_still_leave_noise_alone() -> None:
+    rng = np.random.default_rng(13)
+    premieres = [20, 40]
+    runs = [stretches(rng.normal(8.0, 0.2, 60), premieres=premieres) for _ in range(200)]
+
+    assert sum(r == [60] for r in runs) / len(runs) >= 0.9
+
+
+def test_a_smaller_step_counts_when_it_falls_on_a_premiere() -> None:
+    x = [7.4 + (0.2 if i % 2 else -0.2) for i in range(6)]
+    x += [7.95 + (0.2 if i % 2 else -0.2) for i in range(30)]
+
+    assert stretches(x) == [36]
+    assert stretches(x, premieres=[6]) == [6, 36]
+
+
 def test_identical_ratings_are_one_stretch() -> None:
     assert stretches([7.5] * 30) == [30]
 
@@ -49,13 +65,18 @@ def test_series_too_short_to_split_are_one_stretch() -> None:
 
 
 @settings(max_examples=300)
-@given(st.lists(st.integers(10, 100).map(lambda t: t / 10), min_size=6, max_size=12))
-def test_it_matches_a_brute_force_search(x: list[float]) -> None:
+@given(
+    st.lists(st.integers(10, 100).map(lambda t: t / 10), min_size=6, max_size=12),
+    st.lists(st.integers(1, 11), max_size=3),
+)
+def test_it_matches_a_brute_force_search(x: list[float], premieres: list[int]) -> None:
     pen = penalty(x)
-    ends = stretches(x, pen)
+    ends = stretches(x, pen, premieres=premieres)
 
     assert all(end - start >= 3 for start, end in zip([0, *ends], ends, strict=False))
-    assert objective(x, ends, pen) == pytest.approx(brute_force(x, pen), abs=1e-9)
+    assert objective(x, ends, pen, premieres) == pytest.approx(
+        brute_force(x, pen, premieres), abs=1e-9
+    )
 
 
 def test_noise_comes_from_the_median_jump() -> None:

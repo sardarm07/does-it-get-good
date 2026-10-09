@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime
 from email.utils import format_datetime
 from pathlib import Path
 
+from getgood.analysis.verdicts import Episode
 from getgood.config import EXPECTED_COLUMNS, IMDB_FILES
 from getgood.fetch import Download
 
@@ -57,3 +58,16 @@ def write_fixture(raw: Path, *, cafe_genres: str = "Crime,Drama", votes: int = 1
     ratings += [f"tt4000007\t9.0\t{votes}", f"tt4000008\t9.0\t{votes}"]
     write_imdb_file(raw, EPISODE, episodes)
     write_imdb_file(raw, RATINGS, ratings)
+
+
+def show(
+    *runs: tuple[int, float], per_season: int = 10, votes: int = 10_000, ripple: float = 0.2
+) -> list[Episode]:
+    """Episodes in order: each run is (count, level), with ratings alternating +-ripple."""
+    levels = [level for count, level in runs for _ in range(count)]
+    return [
+        Episode(
+            i // per_season + 1, i % per_season + 1, level + (ripple if i % 2 else -ripple), votes
+        )
+        for i, level in enumerate(levels)
+    ]
