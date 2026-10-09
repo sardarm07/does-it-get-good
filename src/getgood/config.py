@@ -90,6 +90,17 @@ HIGH_CONFIDENCE_VOTES = 100
 """Median votes per episode behind a high-confidence verdict."""
 MEDIUM_CONFIDENCE_VOTES = 20
 
+MIN_BOMB_VOTES = 500
+"""Titles with fewer votes are too thin to judge for bombs or contested episodes."""
+CONTESTED_RATIO = 2.0
+"""A contested episode has at least this many times its neighbours' median votes..."""
+CONTESTED_EDGE_RATIO = 3.0
+"""...or this many for a season premiere or finale, which draw extra votes anyway."""
+CONTESTED_DROP = 0.5
+"""...and rates at least this far below its neighbours' median."""
+CONTESTED_NEIGHBOUR_VOTES = 200
+"""Neighbours need this many median votes, so an established audience is being compared."""
+
 MIN_SIMILARITY = 0.88
 """Jaro-Winkler similarity a typed name needs to match a title it doesn't contain."""
 SIMILAR_WITHIN = 0.03
