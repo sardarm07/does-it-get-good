@@ -7,7 +7,7 @@ any sign of overload: the archive is a non-profit, and a full backfill is about 
 
 import re
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 from email.utils import parsedate_to_datetime
@@ -108,12 +108,18 @@ def probe_days(
     *,
     pause: float = ARCHIVE_PAUSE,
     sleep: Sleep = time.sleep,
+    found: MutableMapping[str, str | None] | None = None,
 ) -> Iterator[Capture]:
-    """Each distinct copy nearest to the given days, for when the capture list is down."""
+    """Each distinct copy nearest to the given days, for when the capture list is down.
+
+    Each day probed goes into `found`, with the copy the archive pointed to, if any.
+    """
     seen: set[str] = set()
     for day in days:
         capture = probe(client, day, sleep=sleep)
         sleep(pause)
+        if found is not None:
+            found[day.isoformat()] = capture.timestamp if capture else None
         if capture is not None and capture.timestamp not in seen:
             seen.add(capture.timestamp)
             yield capture

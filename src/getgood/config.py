@@ -22,6 +22,8 @@ ARCHIVE_PAUSE = 5.0
 ARCHIVE_WAITS = (60.0, 300.0, 900.0)
 """Seconds to wait before each retry after a 429, a 5xx, an offline page or a dropped
 connection to the archive."""
+PROBE_SETTLE_DAYS = 7
+"""Probes of days this recent aren't remembered: the archive may not have their copies yet."""
 
 EXPECTED_COLUMNS = {
     "title.basics.tsv.gz": (

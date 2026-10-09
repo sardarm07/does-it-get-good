@@ -2,22 +2,25 @@
 
 import json
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from getgood.archive import ArchiveError, Capture, days_between, download, list_captures, probe_days
-from getgood.config import ARCHIVE_PAUSE, HISTORY_START, ROW_COUNT_TOLERANCE
+from getgood.config import ARCHIVE_PAUSE, HISTORY_START, PROBE_SETTLE_DAYS, ROW_COUNT_TOLERANCE
 from getgood.fetch import Download
 from getgood.history import compact, gaps, known_days, write_day
 from getgood.validate import allowance, check_copy
 
 STATE = "captures.json"
 """What happened to each archived copy, by capture time, so a backfill never repeats work."""
+PROBED = "probed.json"
+"""The copy the archive pointed to for each day probed, so a resumed backfill skips the days
+it has settled."""
 
 type Say = Callable[[str], None]
 
@@ -65,9 +68,15 @@ def backfill(
     Stops early, keeping what it has, if the archive stays unreachable.
     """
     archive_dir.mkdir(parents=True, exist_ok=True)
-    state = _read_state(archive_dir / STATE)
+    state: dict[str, dict[str, Any]] = _read_json(archive_dir / STATE)
+    probed: dict[str, str | None] = _read_json(archive_dir / PROBED)
     known = known_days(history)
     result = Backfill()
+
+    def save() -> None:
+        _write_json(archive_dir / STATE, state)
+        recent = (until - timedelta(days=PROBE_SETTLE_DAYS)).isoformat()
+        _write_json(archive_dir / PROBED, {d: ts for d, ts in probed.items() if d < recent})
 
     def wait(seconds: float) -> None:
         if seconds >= 60:
@@ -79,15 +88,21 @@ def backfill(
             captures: Iterable[Capture] = list_captures(client, since, sleep=wait)
         except ArchiveError:
             say("The archive's capture list is unavailable; checking day by day instead.")
-            missing = [d for d in days_between(since, until) if d not in known]
-            captures = probe_days(client, missing, pause=pause, sleep=wait)
+            # settled: the archive had no copy, or the copy it pointed to has been dealt with
+            settled = {d for d, ts in probed.items() if ts is None or ts in state}
+            missing = [
+                d
+                for d in days_between(since, until)
+                if d not in known and d.isoformat() not in settled
+            ]
+            captures = probe_days(client, missing, pause=pause, sleep=wait, found=probed)
         for capture in captures:
             if capture.timestamp in state:
                 continue
             state[capture.timestamp] = _take(
                 client, capture, history, current_db, archive_dir, known, state, wait
             )
-            _write_state(archive_dir / STATE, state)
+            save()
             outcome = state[capture.timestamp]
             if outcome["status"] == "kept":
                 result.added.append(date.fromisoformat(outcome["day"]))
@@ -101,6 +116,7 @@ def backfill(
     except ArchiveError as error:
         result.stopped = str(error)
     finally:
+        save()
         compact(history)
     return result
 
@@ -159,14 +175,14 @@ def _row_count_jump(day: date, rows: int, state: dict[str, dict[str, Any]]) -> s
     return f"in-scope rows moved {change:+.1%} from {previous_day} ({days} days earlier)"
 
 
-def _read_state(path: Path) -> dict[str, dict[str, Any]]:
+def _read_json(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text())
     except FileNotFoundError, json.JSONDecodeError:
         return {}
 
 
-def _write_state(path: Path, state: dict[str, dict[str, Any]]) -> None:
+def _write_json(path: Path, data: Mapping[str, Any]) -> None:
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(state, indent=1, sort_keys=True) + "\n")
+    tmp.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n")
     tmp.replace(path)

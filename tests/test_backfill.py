@@ -30,11 +30,18 @@ class FakeArchive:
     """Serves a capture list (or an offline page), redirects for probes, and copies."""
 
     def __init__(
-        self, copies: dict[str, tuple[date, bytes]], *, list_offline: bool = False
+        self,
+        copies: dict[str, tuple[date, bytes]],
+        *,
+        list_offline: bool = False,
+        failing: set[str] | None = None,
     ) -> None:
         self.copies = copies
         self.list_offline = list_offline
+        self.failing = failing or set()
+        """Copies that answer 503 for now."""
         self.downloads: list[str] = []
+        self.probes: list[str] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
@@ -46,12 +53,15 @@ class FakeArchive:
         timestamp = url.split("/web/")[1][:14]
         if request.method == "HEAD":
             day = timestamp[:8]
+            self.probes.append(day)
             nearest = [ts for ts in sorted(self.copies) if ts.startswith(day)]
             if not nearest:
                 return httpx.Response(404)
             return httpx.Response(
                 302, headers={"location": archive.COPY_URL.format(timestamp=nearest[0])}
             )
+        if timestamp in self.failing:
+            return httpx.Response(503)
         self.downloads.append(timestamp)
         day, body = self.copies[timestamp]
         return httpx.Response(
@@ -129,6 +139,34 @@ def test_without_the_capture_list_it_checks_day_by_day(data: Path) -> None:
     result = run(data, fake)
 
     assert result.added == [date(2023, 1, 30), date(2023, 2, 1)]
+
+
+def test_a_resumed_backfill_skips_the_days_it_has_probed(data: Path) -> None:
+    copies = {
+        "20230131013404": (date(2023, 1, 30), ratings_file(100)),
+        "20230202013411": (date(2023, 2, 1), ratings_file(102)),
+    }
+    fake = FakeArchive(copies, list_offline=True)
+    run(data, fake, until=date(2023, 2, 20))
+    fake.probes.clear()
+
+    again = run(data, fake, until=date(2023, 2, 20))
+
+    assert again.added == []
+    # the archive may yet gain copies of the last week's days, so those are asked about again
+    assert fake.probes == [f"202302{d}" for d in range(13, 21)]
+
+
+def test_a_copy_cut_off_by_an_outage_is_fetched_next_time(data: Path) -> None:
+    copies = {"20230131013404": (date(2023, 1, 30), ratings_file(100))}
+    fake = FakeArchive(copies, list_offline=True, failing={"20230131013404"})
+    first = run(data, fake, until=date(2023, 2, 20))
+    assert first.stopped is not None
+    fake.failing.clear()
+
+    again = run(data, fake, until=date(2023, 2, 20))
+
+    assert again.added == [date(2023, 1, 30)]
 
 
 def test_a_copy_that_fails_its_checks_is_skipped_not_fatal(data: Path) -> None:
