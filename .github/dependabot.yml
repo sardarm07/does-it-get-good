@@ -4,6 +4,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    labels: [chore, "area:infra"]
     commit-message:
       prefix: chore
       include: scope
@@ -15,6 +16,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    labels: [chore, "area:infra"]
     commit-message:
       prefix: chore
       include: scope
