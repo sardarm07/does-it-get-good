@@ -76,6 +76,13 @@ HIGH_CONFIDENCE_VOTES = 100
 """Median votes per episode behind a high-confidence verdict."""
 MEDIUM_CONFIDENCE_VOTES = 20
 
+MIN_SIMILARITY = 0.88
+"""Jaro-Winkler similarity a typed name needs to match a title it doesn't contain."""
+SIMILAR_WITHIN = 0.03
+"""Typo matches this close to the best one are worth asking about."""
+ASK_RATIO = 0.05
+"""Ask which show was meant when an equally good match has this share of the best one's votes."""
+
 SCOPE_SIZE_TOLERANCE = 0.03
 """How far the number of in-scope series may move between syncs, per ROW_COUNT_PERIOD_DAYS."""
 LOST_VOTES_TOLERANCE = 0.01

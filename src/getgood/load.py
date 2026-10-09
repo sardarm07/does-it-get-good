@@ -20,6 +20,14 @@ from getgood.validate import Finding, allowance, apart, days_between
 
 BASICS, EPISODE, RATINGS = IMDB_FILES
 
+BUILD_VERSION = "2"
+"""Bump when the tables change for the same IMDb files, so the next sync rebuilds them."""
+
+SEARCH_KEY = (
+    "trim(regexp_replace(lower(strip_accents(replace({}, '&', ' and '))), '[^a-z0-9]+', ' ', 'g'))"
+)
+"""SQL that turns a title, or a name someone types, into the key that search compares."""
+
 
 @dataclass
 class Build:
@@ -41,9 +49,12 @@ def build_current(raw_dir: Path, db_path: Path, downloads: Sequence[Download]) -
 
     The new database replaces the old one only if it passes the checks against it.
     """
-    sources = {f"source:{d.name}": d.last_modified or "" for d in downloads}
+    stamp = {
+        "build_version": BUILD_VERSION,
+        **{f"source:{d.name}": d.last_modified or "" for d in downloads},
+    }
     as_of = max((d.as_of for d in downloads if d.as_of), default=None)
-    if db_path.exists() and _sources(db_path) == sources:
+    if db_path.exists() and _stamp(db_path) == stamp:
         return _summary(db_path, skipped=True)
 
     building = db_path.with_name(db_path.name + ".building")
@@ -52,7 +63,7 @@ def build_current(raw_dir: Path, db_path: Path, downloads: Sequence[Download]) -
         with duckdb.connect(str(building)) as con:
             _create_tables(con, raw_dir)
             con.execute("CREATE TABLE meta (key VARCHAR PRIMARY KEY, value VARCHAR NOT NULL)")
-            meta = [("as_of", as_of.isoformat() if as_of else ""), *sources.items()]
+            meta = [("as_of", as_of.isoformat() if as_of else ""), *stamp.items()]
             con.executemany("INSERT INTO meta VALUES (?, ?)", meta)
             findings = _compare_with(con, db_path, as_of) if db_path.exists() else []
         if any(f.blocking for f in findings):
@@ -97,11 +108,10 @@ def _create_tables(con: duckdb.DuckDBPyConnection, raw_dir: Path) -> None:
           AND NOT list_has_any(string_split(coalesce(s.genres, ''), ','), {excluded})
         GROUP BY e.series
         HAVING count(*) >= {MIN_RATED_EPISODES}""")
-    con.execute("""
+    con.execute(f"""
         CREATE TABLE series AS
         SELECT s.tid, s.title, s.kind, s.start_year, s.end_year, s.genres,
-               trim(regexp_replace(lower(strip_accents(s.title)), '[^a-z0-9]+', ' ', 'g'))
-                   AS search_key
+               {SEARCH_KEY.format("s.title")} AS search_key
         FROM all_series s JOIN scope USING (tid)
         ORDER BY s.tid""")
     con.execute("""
@@ -163,11 +173,13 @@ def _compare_with(
     return found
 
 
-def _sources(db_path: Path) -> dict[str, str]:
-    """Which IMDb files the database was built from, by their Last-Modified headers."""
+def _stamp(db_path: Path) -> dict[str, str]:
+    """The build version and IMDb files (by Last-Modified) the database was built from."""
     try:
         with duckdb.connect(str(db_path), read_only=True) as con:
-            rows = con.execute("SELECT key, value FROM meta WHERE key LIKE 'source:%'").fetchall()
+            rows = con.execute(
+                "SELECT key, value FROM meta WHERE key = 'build_version' OR key LIKE 'source:%'"
+            ).fetchall()
     except duckdb.Error:
         return {}
     return {key: value for key, value in rows}
