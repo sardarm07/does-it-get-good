@@ -67,9 +67,15 @@ Review bombs come from the history. Each day, every title's new votes are compar
 ## Development
 
 ```bash
-make test                      # ruff, pyright and pytest
-make validate                  # score the verdicts against validation/turning_points.yaml (after a sync)
+make test                      # ruff, pyright and pytest with coverage; analysis/ must stay at 90%
+make validate                  # score verdicts and review bombs against validation/ (after a sync)
+make review                    # draw review-bomb events into validation/reviewed_events.yaml to mark
+make data                      # getgood sync --no-history
+make history                   # getgood sync
+make backup BACKUP_DIR=/Volumes/Drive/getgood   # copy the history somewhere safe
 ```
+
+The history can be downloaded again only while the Internet Archive keeps its copies, so back it up now and then. Everything else in `data/` is rebuilt by a sync.
 
 Changes are committed to `main` once `make test` passes, and CI checks every push. Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/).
 
