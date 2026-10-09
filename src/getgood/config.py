@@ -50,6 +50,9 @@ MIN_RATED_EPISODES = 6
 EXCLUDED_GENRES = ("Talk-Show", "News", "Reality-TV", "Game-Show")
 """Shows where "gets good" means little."""
 
+DAMPING_K = 10.0
+"""Votes' worth of the show's mean added to each episode: 10 votes moves an episode halfway."""
+
 SCOPE_SIZE_TOLERANCE = 0.03
 """How far the number of in-scope series may move between syncs, per ROW_COUNT_PERIOD_DAYS."""
 LOST_VOTES_TOLERANCE = 0.01
