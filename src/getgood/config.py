@@ -105,6 +105,11 @@ MIN_BASELINE_DAYS = 7
 """Fewer earlier days than this, and a title isn't judged against its own pace yet."""
 LAUNCH_DAYS = 14
 """A title this new is judged against its siblings, not its own pace."""
+ARRIVAL_GROWTH = 5.0
+"""A title whose votes grow this many times over within LAUNCH_DAYS either side of a day is
+arriving that day, like a show rated before its release and then released: its own past
+pace says nothing about what's normal, so it isn't judged against it. Releases measured
+7 to 450 times over; the biggest bomb on a small show, 3."""
 SHOCK_DROP = 0.2
 """A surge is a bomb if the rating falls at least this much that day, a boost if it rises."""
 NEW_VOTES_ERROR = 1.0

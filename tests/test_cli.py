@@ -245,7 +245,7 @@ def test_show_json_includes_the_history_and_matches_the_schema(bombed: Path) -> 
         "launch": True,
         "votes": 5_000,
         "rating": 7.0,
-        "rating_change": -2.0,
+        "rating_change": -2.05,  # against E2 and E4 to E6, the premiere left out
         "extra_votes": 3_500,
         "z": None,
         "ratio": 3.33,

@@ -13,11 +13,11 @@ SHOW = 1
 
 def five_episodes(
     bombed: int, *, rating: float = 7.0
-) -> tuple[list[Row], list[tuple[int, int, int]]]:
+) -> tuple[list[Row], list[tuple[int, int, int, int]]]:
     """A series page and five weekly episodes from day 10; episode `bombed` draws a crowd."""
     tids = [101, 102, 103, 104, 105]
     rows = season(SHOW, tids, bombed=100 + bombed, rating=rating)
-    return rows, [(t, SHOW, 1) for t in tids]
+    return rows, [(t, SHOW, 1, k) for k, t in enumerate(tids, 1)]
 
 
 @pytest.fixture
@@ -29,12 +29,12 @@ def con() -> Iterator[duckdb.DuckDBPyConnection]:
 def flags(
     con: duckdb.DuckDBPyConnection,
     rows: list[Row],
-    episodes: Iterable[tuple[int, int, int]] = (),
+    episodes: Iterable[tuple[int, int, int, int]] = (),
     *,
     since: date | None = None,
     until: date | None = None,
 ) -> list[Flag]:
-    """Load a history and its episodes (tid, series, season), then look for flags."""
+    """Load a history and its episodes (tid, series, season, episode), then look for flags."""
     con.execute("CREATE OR REPLACE TABLE hist (tid INT, date DATE, rating_x10 UTINYINT, votes INT)")
     con.execute(
         "INSERT INTO hist SELECT unnest($tid), unnest($date), unnest($rating), unnest($votes)",
@@ -45,9 +45,9 @@ def flags(
             "votes": [r[3] for r in rows],
         },
     )
-    con.execute("CREATE OR REPLACE TABLE eps (tid INT, series INT, season INT)")
+    con.execute("CREATE OR REPLACE TABLE eps (tid INT, series INT, season INT, episode INT)")
     for episode in episodes:
-        con.execute("INSERT INTO eps VALUES (?, ?, ?)", episode)
+        con.execute("INSERT INTO eps VALUES (?, ?, ?, ?)", episode)
     days = {r[1] for r in rows}
     return find_flags(con, "hist", "eps", days, since=since, until=until)
 
@@ -144,6 +144,28 @@ def test_a_surge_must_be_a_real_share_of_the_votes(
     assert bool(found) is flagged
 
 
+@pytest.mark.parametrize(("extra", "flagged"), [(2_000, True), (6_000, False)])
+def test_a_title_whose_votes_grow_fivefold_is_arriving_not_bombed(
+    con: duckdb.DuckDBPyConnection, extra: int, flagged: bool
+) -> None:
+    rows = steady(101, range(61), votes=1_000, pace=10, rating=8.5)
+
+    # from 1,260 votes two weeks before day 40 to 1,540 two weeks after, plus the burst
+    found = flags(con, burst(rows, at=40, extra=extra, rating=8.0))
+
+    assert bool(found) is flagged
+
+
+def test_an_arrival_after_a_gap_counts_the_day_before_it(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    # rated before release, then a month unseen, then released: 6,000 votes on 300
+    early = steady(101, range(20), votes=200, pace=5, rating=9.5)
+    late = steady(101, range(50, 91), votes=6_000, pace=10, rating=7.0)
+
+    assert flags(con, early + late) == []
+
+
 def test_new_votes_are_spread_over_missing_days(con: duckdb.DuckDBPyConnection) -> None:
     rows = [
         r
@@ -183,7 +205,13 @@ def test_an_episode_far_ahead_of_its_season_at_launch_is_a_bomb(
     assert first.votes == 5_000
     assert first.ratio == pytest.approx(5_000 / 1_500)
     assert first.extra_votes == 3_500
-    assert first.rating_change == pytest.approx(7.0 - 8.9)
+    assert first.rating_change == pytest.approx(7.0 - 9.0)  # against E2, E4 and E5
+
+
+def test_a_season_premiere_is_left_out_at_launch(con: duckdb.DuckDBPyConnection) -> None:
+    rows, episodes = five_episodes(bombed=1)
+
+    assert flags(con, rows, episodes) == []
 
 
 def test_a_crowd_for_a_better_rated_episode_is_no_bomb(con: duckdb.DuckDBPyConnection) -> None:

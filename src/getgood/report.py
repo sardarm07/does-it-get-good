@@ -246,7 +246,13 @@ def what(e: Event, labels: Mapping[int, str]) -> str:
         change: dict[int, float] = defaultdict(float)
         for f in daily:
             change[f.tid] += f.rating_change
-        biggest = max(change.values(), key=abs)
+        # what the event is named for: a bomb's biggest drop, a boost's biggest rise
+        if e.kind == "bomb":
+            biggest = min(change.values())
+        elif e.kind == "boost":
+            biggest = max(change.values())
+        else:
+            biggest = max(change.values(), key=abs)
         moved = f", rating {biggest:+.1f}" if abs(biggest) >= 0.05 else ", rating unmoved"
         extra = sum(f.extra_votes for f in daily)
         effects.append(f"{extra:,.0f} more votes than usual{moved}")

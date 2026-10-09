@@ -2,13 +2,15 @@
 
 Two checks, both in SQL over the history, so one show and every show use the same code:
 
-- Daily: a title with 500+ votes, at least 14 days into the history, is compared with its
-  own pace over its last 28 history days (a robust z-score of new votes per day). A surge
-  that drags the rating down is a bomb, one that lifts it is a boost, and one that leaves
-  it where it was is suspicious.
+- Daily: a title with 500+ votes, at least 14 days into the history and not arriving (its
+  votes don't grow fivefold within 14 days either side), is compared with its own pace over
+  its last 28 history days (a robust z-score of new votes per day). A surge that drags the
+  rating down is a bomb, one that lifts it is a boost, and one that leaves it where it was
+  is suspicious.
 - Launch: an episode in its first 14 days has no pace of its own yet, so it's compared with
   its season's other episodes at the same age. Far more votes and a far lower rating is a
-  bomb.
+  bomb. Season premieres are left out on both sides: they always draw extra votes, and
+  lower ratings, from people who don't go on.
 
 Flags on one show within 2 days of each other form one event.
 """
@@ -22,6 +24,7 @@ from typing import Literal
 import duckdb
 
 from getgood.config import (
+    ARRIVAL_GROWTH,
     BASELINE_DAYS,
     EVENT_DAYS,
     LAUNCH_DAYS,
@@ -43,7 +46,7 @@ KINDS: tuple[Kind, ...] = ("bomb", "boost", "suspicious")
 SHOCK_X10 = round(SHOCK_DROP * 10)
 
 # Ratings are compared in tenths, as integers, so 8.3 - 8.5 is exactly -0.2.
-# {history}: (tid, date, rating_x10, votes); {episodes}: (tid, series, season);
+# {history}: (tid, date, rating_x10, votes); {episodes}: (tid, series, season, episode);
 # {where}: a condition on the history's rows.
 DAILY = f"""
     WITH h AS (
@@ -55,14 +58,21 @@ DAILY = f"""
     steps AS (
         SELECT tid, date, rating_x10, votes,
                min(date) OVER (PARTITION BY tid) AS first_day,
+               min(votes) OVER around AS around_low,
+               max(votes) OVER around AS around_high,
                lag(date) OVER w AS prev_date,
                lag(rating_x10) OVER w AS prev_rating_x10,
                lag(votes) OVER w AS prev_votes
         FROM h
-        WINDOW w AS (PARTITION BY tid ORDER BY date)
+        WINDOW w AS (PARTITION BY tid ORDER BY date),
+               around AS (PARTITION BY tid ORDER BY date
+                          RANGE BETWEEN INTERVAL {LAUNCH_DAYS} DAYS PRECEDING
+                          AND INTERVAL {LAUNCH_DAYS} DAYS FOLLOWING)
     ),
     changes AS (
         SELECT tid, date, rating_x10, votes, first_day,
+               -- the day before the window counts too, when the history skipped days
+               around_high >= {ARRIVAL_GROWTH} * least(around_low, prev_votes) AS arriving,
                date - prev_date AS gap,
                (votes - prev_votes) / (date - prev_date) AS dv,
                rating_x10 - prev_rating_x10 AS dr_x10,
@@ -93,6 +103,7 @@ DAILY = f"""
     WHERE s.votes >= {MIN_BOMB_VOTES}
       AND s.base_days >= {MIN_BASELINE_DAYS}
       AND s.date - s.first_day >= {LAUNCH_DAYS}
+      AND NOT s.arriving
       AND (s.dv - s.base) / (1.4826 * s.spread + 1) >= {SURGE_Z}
       AND s.dv >= greatest({SURGE_MIN_VOTES}, {SURGE_MIN_SHARE} * s.votes)
       AND ($since IS NULL OR s.date >= $since)
@@ -119,7 +130,7 @@ LAUNCH = f"""
                CAST(h.rating_x10 AS INTEGER) AS rating_x10, CAST(h.votes AS BIGINT) AS votes,
                h.date - o.first_day AS age
         FROM {{history}} h JOIN observed o USING (tid) JOIN {{episodes}} e USING (tid)
-        WHERE h.date - o.first_day BETWEEN 1 AND {LAUNCH_DAYS - 1}
+        WHERE h.date - o.first_day BETWEEN 1 AND {LAUNCH_DAYS - 1} AND e.episode > 1
     ),
     compared AS (
         SELECT a.tid, a.series, a.date, a.votes, a.rating_x10,
@@ -192,9 +203,9 @@ def find_flags(
 ) -> list[Flag]:
     """Every daily and launch flag between since and until, in date order.
 
-    The history and the episodes (tid, series, season) are SQL relations; days are every
-    day the history holds. `where` must keep whole titles' histories: each title's baseline
-    and first day come from all of it, not just the days asked about.
+    The history and the episodes (tid, series, season, episode) are SQL relations; days are
+    every day the history holds. `where` must keep whole titles' histories: each title's
+    baseline and first day come from all of it, not just the days asked about.
     """
     found = daily_flags(con, history, episodes, where=where, since=since, until=until)
     found += launch_flags(con, history, episodes, days, where=where, since=since, until=until)

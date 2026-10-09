@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import duckdb
 
 from getgood.analysis.bombs import Event, Flag, daily_flags, group, launch_flags, rank
-from getgood.config import BASELINE_DAYS, MIN_BOMB_VOTES
+from getgood.config import BASELINE_DAYS, LAUNCH_DAYS, MIN_BOMB_VOTES
 from getgood.report import CREDIT, SERIES_PAGE, what, when
 from getgood.search import Match
 
@@ -40,8 +40,9 @@ def sweep(
 ) -> list[Event]:
     """Every event across all shows with a flag between since and until, in date order.
 
-    Daily flags are found a month at a time, each month reading only its own days and the
-    28 history days before them; months the history doesn't reach are skipped.
+    Daily flags are found a month at a time, each month reading only its own days, the 28
+    history days before them and the 14 days after, which tell an arrival from a surge;
+    months the history doesn't reach are skipped.
     """
     ordered = sorted(days)
     flags: list[Flag] = []
@@ -50,7 +51,7 @@ def sweep(
         end = min(until, start + timedelta(days=SWEEP_DAYS - 1))
         before = [d for d in ordered if d < start]
         if any(start <= d <= end for d in ordered):
-            where = f"{VOTED} AND date <= DATE '{end.isoformat()}'"
+            where = f"{VOTED} AND date <= DATE '{end + timedelta(days=LAUNCH_DAYS)}'"
             if len(before) > BASELINE_DAYS:
                 where += f" AND date >= DATE '{before[-BASELINE_DAYS - 1].isoformat()}'"
             flags += daily_flags(con, history, "episodes", where=where, since=start, until=end)
