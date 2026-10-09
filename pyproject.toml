@@ -1,6 +1,6 @@
 [project]
 name = "getgood"
-version = "0.0.0"
+version = "0.1.0"
 description = "Finds where a TV series gets good, slumps or gets review-bombed, from IMDb's datasets"
 readme = "README.md"
 license = "MIT"

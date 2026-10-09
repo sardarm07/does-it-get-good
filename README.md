@@ -55,7 +55,9 @@ make test                      # ruff, pyright and pytest
 make validate                  # score the verdicts against validation/turning_points.yaml (after a sync)
 ```
 
-Changes go through pull requests with green CI. Commit messages and PR titles follow [Conventional Commits](https://www.conventionalcommits.org/).
+Changes are committed to `main` once `make test` passes, and CI checks every push. Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/).
+
+Each milestone ends with a release: add its entry to `CHANGELOG.md`, bump the version in `pyproject.toml` and run `uv lock`, commit `chore(release): X.Y.Z`, then push an annotated tag `vX.Y.Z` and publish a GitHub Release with the changelog entry.
 
 ## Data and licence
 
