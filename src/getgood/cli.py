@@ -185,7 +185,7 @@ def show(
         raise typer.Exit(1)
     with duckdb.connect(str(db), read_only=True) as con:
         match = _choose(find(con, name, year=year), name, ask=not as_json)
-        result = answer(con, match)
+        result = answer(con, match, data_dir / "history")
     if as_json:
         typer.echo(json.dumps(result.to_json(), ensure_ascii=False, indent=2))
     else:

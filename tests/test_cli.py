@@ -15,7 +15,7 @@ from getgood.fetch import Download, FetchError
 from getgood.load import Build, build_current
 from getgood.search import Found, Match
 from getgood.validate import Finding, Report
-from tests.helpers import downloads, write_fixture
+from tests.helpers import downloads, season, write_fixture, write_history
 
 IMDB_DATE = "Fri, 09 Oct 2026 00:39:31 GMT"
 
@@ -154,7 +154,29 @@ def test_show_prints_the_verdict_and_the_credit(data_dir: Path) -> None:
         == "Grey's Anatomy (2005–) · tt0000001 · 6 rated episodes · IMDb's files of 2026-10-09"
     )
     assert lines[2].startswith("No clear turn (")
+    assert "Review bombs: unknown: the history is empty until getgood sync" in lines
     assert lines[-1] == "Information courtesy of IMDb (https://www.imdb.com). Used with permission."
+
+
+@pytest.fixture
+def bombed(data_dir: Path) -> Path:
+    """The same tables, with a history in which Grey's Anatomy S1E3 was bombed at launch."""
+    episodes = [1_000_001 + k for k in range(6)]  # S1E1 to S1E6
+    write_history(data_dir / "history", season(1, episodes, bombed=1_000_003))
+    return data_dir
+
+
+def test_show_lists_review_bombs_from_the_history(bombed: Path) -> None:
+    result = CliRunner().invoke(app, ["show", "greys anatomy", "--data-dir", str(bombed)])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert (
+        "Review bombs: 2023-01-26 to 2023-02-07, S1E3: at launch, up to 3.9× the votes of its "
+        "season's other episodes and 2.0 below their rating"
+    ) in lines
+    assert "History:      60 days from 2023-01-01 to 2023-03-01" in lines
+    assert not any(line.startswith(("Boosts:", "Vote surges:")) for line in lines)
 
 
 def test_show_json_matches_the_schema(data_dir: Path) -> None:
@@ -174,6 +196,36 @@ def test_show_json_matches_the_schema(data_dir: Path) -> None:
         "votes": 100,
     }
     assert len(data["episodes"]) == 6
+    assert data["history"] is None
+
+
+def test_show_json_includes_the_history_and_matches_the_schema(bombed: Path) -> None:
+    result = CliRunner().invoke(app, ["show", "tt0000001", "--json", "--data-dir", str(bombed)])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    schema = json.loads((Path(__file__).parents[1] / "schema" / "answer.schema.json").read_text())
+    jsonschema.validate(data, schema, format_checker=jsonschema.FormatChecker())
+    history = data["history"]
+    assert (history["days"], history["first"], history["last"]) == (60, "2023-01-01", "2023-03-01")
+    [event] = history["events"]
+    assert event["kind"] == "bomb"
+    assert (event["from"], event["to"], event["titles"]) == ("2023-01-26", "2023-02-07", ["S1E3"])
+    assert event["series_wide"] is False
+    assert event["extra_votes"] == 29_000 - 7_500  # its biggest lead, at 13 days old
+    assert len(event["flags"]) == 13
+    assert event["flags"][0] == {
+        "title": "S1E3",
+        "day": "2023-01-26",
+        "launch": True,
+        "votes": 5_000,
+        "rating": 7.0,
+        "rating_change": -2.0,
+        "extra_votes": 3_500,
+        "z": None,
+        "ratio": 3.33,
+        "new_votes_rating": None,
+    }
 
 
 GREYS = Match(1, "Grey's Anatomy", 2005, None, 100, 4.0)

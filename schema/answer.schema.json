@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/sardarm07/does-it-get-good/blob/main/schema/answer.schema.json",
   "title": "getgood show --json",
-  "description": "What getgood says about one series. Episode labels look like S2E1.",
+  "description": "What getgood says about one series. Episode labels look like S2E1; the series' own page is \"series\".",
   "type": "object",
   "additionalProperties": false,
-  "required": ["as_of", "series", "verdict", "slumps", "low_points", "stretches", "episode_columns", "episodes", "credit"],
+  "required": ["as_of", "series", "verdict", "slumps", "low_points", "contested", "history", "stretches", "episode_columns", "episodes", "credit"],
   "properties": {
     "as_of": {
       "description": "The date IMDb published the files behind the answer.",
@@ -57,6 +57,39 @@
       }
     },
     "low_points": {"type": "array", "items": {"$ref": "#/$defs/label"}},
+    "contested": {
+      "description": "Episodes with far more votes than their neighbours and a much lower rating, from today's numbers.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["episode", "votes", "rating", "neighbour_votes", "neighbour_rating"],
+        "properties": {
+          "episode": {"$ref": "#/$defs/label"},
+          "votes": {"type": "integer", "minimum": 0},
+          "rating": {"type": "number", "minimum": 1, "maximum": 10},
+          "neighbour_votes": {"type": "number", "minimum": 0},
+          "neighbour_rating": {"type": "number", "minimum": 1, "maximum": 10}
+        }
+      }
+    },
+    "history": {
+      "description": "What the rating history shows, or null while it holds no days.",
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["days", "first", "last", "events"],
+          "properties": {
+            "days": {"type": "integer", "minimum": 1},
+            "first": {"type": "string", "format": "date"},
+            "last": {"type": "string", "format": "date"},
+            "events": {"type": "array", "items": {"$ref": "#/$defs/event"}}
+          }
+        }
+      ]
+    },
     "stretches": {
       "type": "array",
       "minItems": 1,
@@ -91,6 +124,44 @@
     "credit": {"const": "Information courtesy of IMDb (https://www.imdb.com). Used with permission."}
   },
   "$defs": {
-    "label": {"type": "string", "pattern": "^S[0-9]+E[0-9]+$"}
+    "label": {"type": "string", "pattern": "^S[0-9]+E[0-9]+$"},
+    "title": {
+      "description": "\"series\" for the series' own page, otherwise an episode label.",
+      "type": "string",
+      "pattern": "^(series|S[0-9]+E[0-9]+|tt[0-9]{7,})$"
+    },
+    "event": {
+      "description": "Flags on one show no more than 2 days apart.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to", "titles", "series_wide", "extra_votes", "flags"],
+      "properties": {
+        "kind": {"enum": ["bomb", "boost", "suspicious"]},
+        "from": {"type": "string", "format": "date"},
+        "to": {"type": "string", "format": "date"},
+        "titles": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/title"}},
+        "series_wide": {"type": "boolean"},
+        "extra_votes": {"type": "integer"},
+        "flags": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/flag"}}
+      }
+    },
+    "flag": {
+      "description": "One title on one day: a surge against its own pace, or a launch against its season's other episodes at the same age.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "day", "launch", "votes", "rating", "rating_change", "extra_votes", "z", "ratio", "new_votes_rating"],
+      "properties": {
+        "title": {"$ref": "#/$defs/title"},
+        "day": {"type": "string", "format": "date"},
+        "launch": {"type": "boolean"},
+        "votes": {"type": "integer", "minimum": 0},
+        "rating": {"type": "number", "minimum": 1, "maximum": 10},
+        "rating_change": {"type": "number"},
+        "extra_votes": {"type": "integer"},
+        "z": {"type": ["number", "null"]},
+        "ratio": {"type": ["number", "null"]},
+        "new_votes_rating": {"type": ["number", "null"]}
+      }
+    }
   }
 }

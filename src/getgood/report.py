@@ -1,17 +1,30 @@
 """What getgood show says about one series, as data and as text."""
 
+from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
 from typing import Any
 
 import duckdb
 import typer
 
+from getgood.analysis.bombs import Event, Flag, find_flags, group
+from getgood.analysis.contested import Contested, contested
 from getgood.analysis.verdicts import Episode, Verdict, judge
 from getgood.duck import scalar
+from getgood.history import known_days, source
 from getgood.search import Match
 
 CREDIT = "Information courtesy of IMDb (https://www.imdb.com). Used with permission."
 EPISODE_COLUMNS = ("season", "episode", "rating_x10", "votes", "damped_x100")
+SERIES_PAGE = "series"
+"""The label of the series' own page, beside episode labels like S2E1."""
+FIELD = 14
+"""Width of the field names in the text answer."""
+MAX_NAMED = 4
+"""An event touching more titles than this counts its episodes instead of naming them."""
 
 EPISODES = """
     SELECT e.season, e.episode, r.rating_x10, r.votes
@@ -19,6 +32,17 @@ EPISODES = """
     WHERE e.series = ?
     ORDER BY e.season, e.episode, e.tid
 """
+TITLES = "SELECT tid, season, episode FROM episodes WHERE series = ? ORDER BY season, episode"
+
+
+@dataclass(frozen=True)
+class History:
+    """The days the history holds, and what they show for one series."""
+
+    days: int
+    first: date
+    last: date
+    events: tuple[Event, ...]
 
 
 @dataclass(frozen=True)
@@ -28,6 +52,11 @@ class Answer:
     kind: str
     episodes: tuple[Episode, ...]
     verdict: Verdict
+    contested: tuple[Contested, ...]
+    labels: Mapping[int, str]
+    """Each title ID's label: SERIES_PAGE, or an episode's like S2E1."""
+    history: History | None
+    """None until the history holds a day."""
 
     @property
     def headline(self) -> str:
@@ -40,9 +69,18 @@ class Answer:
             return "Steady from start to finish"
         return "No clear turn"
 
+    def label(self, tid: int) -> str:
+        return self.labels.get(tid, f"tt{tid:07d}")
+
+    def ordered(self, titles: tuple[int, ...]) -> list[int]:
+        """Titles in the show's order: the series page, then by season and episode."""
+        place = {tid: i for i, tid in enumerate(self.labels)}
+        return sorted(titles, key=lambda t: place.get(t, len(place)))
+
     def to_json(self) -> dict[str, Any]:
         v = self.verdict
         label = [e.label for e in self.episodes]
+        h = self.history
         return {
             "as_of": self.as_of,
             "series": {
@@ -67,6 +105,24 @@ class Answer:
                 for s in v.slumps
             ],
             "low_points": list(v.low_points),
+            "contested": [
+                {
+                    "episode": c.episode,
+                    "votes": c.votes,
+                    "rating": c.rating,
+                    "neighbour_votes": c.neighbour_votes,
+                    "neighbour_rating": c.neighbour_rating,
+                }
+                for c in self.contested
+            ],
+            "history": None
+            if h is None
+            else {
+                "days": h.days,
+                "first": h.first.isoformat(),
+                "last": h.last.isoformat(),
+                "events": [self._event_json(e) for e in h.events],
+            },
             "stretches": [
                 {
                     "from": label[p.start],
@@ -84,6 +140,33 @@ class Answer:
             "credit": CREDIT,
         }
 
+    def _event_json(self, e: Event) -> dict[str, Any]:
+        return {
+            "kind": e.kind,
+            "from": e.start.isoformat(),
+            "to": e.end.isoformat(),
+            "titles": [self.label(t) for t in self.ordered(e.titles)],
+            "series_wide": e.series_wide,
+            "extra_votes": round(e.extra_votes),
+            "flags": [self._flag_json(f) for f in e.flags],
+        }
+
+    def _flag_json(self, f: Flag) -> dict[str, Any]:
+        return {
+            "title": self.label(f.tid),
+            "day": f.day.isoformat(),
+            "launch": f.launch,
+            "votes": f.votes,
+            "rating": f.rating,
+            "rating_change": f.rating_change,
+            "extra_votes": round(f.extra_votes),
+            "z": None if f.z is None else round(f.z, 1),
+            "ratio": None if f.ratio is None else round(f.ratio, 2),
+            "new_votes_rating": None
+            if f.new_votes_rating is None
+            else round(f.new_votes_rating, 1),
+        }
+
     def to_text(self) -> str:
         v = self.verdict
         s = self.series
@@ -93,30 +176,111 @@ class Answer:
             + ("" if x.recovered else ", no recovery")
             for x in v.slumps
         ]
+        contested_episodes = [
+            f"{c.episode}, {c.vote_ratio:.1f}× its neighbours' votes, "
+            f"rated {-c.rating_gap:.1f} below them"
+            for c in self.contested
+        ]
         lines = [
             f"{s.title} ({s.years}) · {s.imdb_id} · {len(self.episodes)} rated episodes · {files}",
             "",
             typer.style(self.headline, bold=True) + f" ({v.confidence} confidence)",
             v.reason,
             "",
-            "Slumps:     " + ("\n            ".join(slumps) if slumps else "none"),
-            "Low points: " + (", ".join(v.low_points) if v.low_points else "none"),
+            *_field("Slumps", slumps),
+            *_field("Low points", list(v.low_points)),
+            *_field("Contested", contested_episodes),
+            *self._history_text(),
             "",
             CREDIT,
         ]
         return "\n".join(lines)
 
+    def _history_text(self) -> list[str]:
+        h = self.history
+        if h is None:
+            return _field("Review bombs", ["unknown: the history is empty until getgood sync"])
+        by_kind: dict[str, list[str]] = defaultdict(list)
+        for e in h.events:
+            by_kind[e.kind].append(self._event_text(e))
+        lines = _field("Review bombs", by_kind["bomb"])
+        if by_kind["boost"]:
+            lines += _field("Boosts", by_kind["boost"])
+        if by_kind["suspicious"]:
+            lines += _field("Vote surges", by_kind["suspicious"])
+        return [*lines, *_field("History", [f"{h.days:,} days from {h.first} to {h.last}"])]
 
-def answer(con: duckdb.DuckDBPyConnection, match: Match) -> Answer:
-    """Judge one series from the current tables."""
+    def _event_text(self, e: Event) -> str:
+        when = str(e.start) if e.start == e.end else f"{e.start} to {e.end}"
+        effects: list[str] = []
+        launch = [f for f in e.flags if f.launch]
+        if launch:
+            ratio = max(f.ratio or 0.0 for f in launch)
+            gap = min(f.rating_change for f in launch)
+            effects.append(
+                f"at launch, up to {ratio:.1f}× the votes of its season's other episodes "
+                f"and {-gap:.1f} below their rating"
+            )
+        daily = [f for f in e.flags if not f.launch]
+        if daily:
+            change: dict[int, float] = defaultdict(float)
+            for f in daily:
+                change[f.tid] += f.rating_change
+            biggest = max(change.values(), key=abs)
+            moved = f", rating {biggest:+.1f}" if abs(biggest) >= 0.05 else ", rating unmoved"
+            extra = sum(f.extra_votes for f in daily)
+            effects.append(f"{extra:,.0f} more votes than usual{moved}")
+        return f"{when}, {self._titles_text(e)}: " + "; ".join(effects)
+
+    def _titles_text(self, e: Event) -> str:
+        names = [
+            "series page" if self.label(t) == SERIES_PAGE else self.label(t)
+            for t in self.ordered(e.titles)
+        ]
+        if len(names) <= MAX_NAMED:
+            return ", ".join(names)
+        episodes = len([t for t in e.titles if t != e.show])
+        counted = f"{episodes} episodes"
+        return f"series page and {counted}" if e.show in e.titles else counted
+
+
+def _field(name: str, items: list[str]) -> list[str]:
+    """A named field of the text answer, one item per line."""
+    head = f"{name}:".ljust(FIELD)
+    if not items:
+        return [head + "none"]
+    return [head + items[0], *(" " * FIELD + item for item in items[1:])]
+
+
+def answer(con: duckdb.DuckDBPyConnection, match: Match, history: Path | None = None) -> Answer:
+    """Judge one series from the current tables and, when there is one, the history."""
     episodes = tuple(
         Episode(season, number, rating_x10 / 10, votes)
         for season, number, rating_x10, votes in con.execute(EPISODES, [match.tid]).fetchall()
     )
+    labels = {match.tid: SERIES_PAGE} | {
+        tid: f"S{season}E{number}"
+        for tid, season, number in con.execute(TITLES, [match.tid]).fetchall()
+    }
     return Answer(
         as_of=scalar(con, "SELECT value FROM meta WHERE key = 'as_of'") or None,
         series=match,
         kind=scalar(con, "SELECT kind FROM series WHERE tid = ?", [match.tid]),
         episodes=episodes,
         verdict=judge(episodes),
+        contested=contested(episodes),
+        labels=labels,
+        history=None if history is None else _history(con, history, labels),
     )
+
+
+def _history(
+    con: duckdb.DuckDBPyConnection, history: Path, labels: Mapping[int, str]
+) -> History | None:
+    relation = source(history)
+    days = known_days(history)
+    if relation is None or not days:
+        return None
+    titles = "tid IN (" + ", ".join(str(t) for t in labels) + ")"
+    flags = find_flags(con, relation, "episodes", days, titles=titles)
+    return History(len(days), min(days), max(days), tuple(group(flags)))

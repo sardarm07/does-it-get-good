@@ -28,7 +28,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
-allowed-confusables = ["–"]  # en dash in episode ranges such as S1E1–S1E6
+allowed-confusables = ["–", "×"]  # S1E1–S1E6, and 3.0× the votes
 
 [tool.pyright]
 include = ["src", "tests"]

@@ -46,13 +46,18 @@ Example Show (2015–2021) · tt1234567 · 64 rated episodes · IMDb's files of 
 Gets good at S2E3 (high confidence)
 S1E1–S2E2 average 7.3. From S2E3 the next 31 episodes average 8.2 (+0.9).
 
-Slumps:     S5E2–S5E9, 0.6 below its usual level
-Low points: S6E10
+Slumps:       S5E2–S5E9, 0.6 below its usual level
+Low points:   S6E10
+Contested:    S6E10, 4.2× its neighbours' votes, rated 1.9 below them
+Review bombs: 2024-03-02 to 2024-03-04, series page, S6E10: 8,400 more votes than usual, rating -0.4
+History:      1,412 days from 2022-02-21 to 2026-10-09
 
 Information courtesy of IMDb (https://www.imdb.com). Used with permission.
 ```
 
 Ratings with few votes are pulled toward the show's average before anything else happens, so a handful of votes can't create a turn. The verdict comes from splitting the episodes into flat stretches and reading the jumps between them; the reason line shows the numbers behind it.
+
+Review bombs come from the history. Each day, every title's new votes are compared with its own usual pace: a surge far beyond it that drags the rating down is a review bomb, one that lifts the rating is a boost, and one that leaves it alone is a vote surge. A new episode has no pace of its own yet, so for its first two weeks it's compared with its season's other episodes at the same age. Contested episodes come from today's numbers alone: far more votes than the episodes around them and a much lower rating. That can't be dated or told apart from honest backlash, so it isn't called a bomb.
 
 ## Development
 

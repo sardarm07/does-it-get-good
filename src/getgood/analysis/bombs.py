@@ -14,7 +14,7 @@ Flags on one show within 2 days of each other form one event.
 """
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal
@@ -99,7 +99,7 @@ DAILY = f"""
       AND ($until IS NULL OR s.date <= $until)
 """
 
-# Also needs {days}: (date), every day the history holds.
+# $days: every day the history holds.
 LAUNCH = f"""
     WITH h AS (
         SELECT tid, date, CAST(rating_x10 AS INTEGER) AS rating_x10,
@@ -113,7 +113,7 @@ LAUNCH = f"""
         SELECT f.tid, f.first_day
         FROM first_seen f
         WHERE EXISTS (
-            SELECT 1 FROM {{days}} d
+            SELECT 1 FROM (SELECT unnest(CAST($days AS DATE[])) AS date) d
             WHERE d.date < f.first_day AND d.date >= f.first_day - {MAX_GAP_DAYS}
         )
     ),
@@ -186,7 +186,7 @@ def find_flags(
     con: duckdb.DuckDBPyConnection,
     history: str,
     episodes: str,
-    days: str,
+    days: Collection[date],
     *,
     titles: str = "true",
     since: date | None = None,
@@ -194,11 +194,11 @@ def find_flags(
 ) -> list[Flag]:
     """Every daily and launch flag between since and until, for the titles the filter keeps.
 
-    The relations are SQL: the history, the episodes (tid, series, season), and the days
-    the history holds (date). Each title's baseline and first day come from its whole
-    history, not just the days asked about.
+    The history and the episodes (tid, series, season) are SQL relations; days are every
+    day the history holds. Each title's baseline and first day come from its whole history,
+    not just the days asked about.
     """
-    params = {"since": since, "until": until}
+    params: dict[str, object] = {"since": since, "until": until}
     found: list[Flag] = []
     daily = DAILY.format(history=history, episodes=episodes, titles=titles)
     for tid, show, day, votes, rating_x10, dr_x10, extra, z, new_rating, error in con.execute(
@@ -222,9 +222,9 @@ def find_flags(
                 new_votes_rating=new_rating if error <= NEW_VOTES_ERROR else None,
             )
         )
-    launch = LAUNCH.format(history=history, episodes=episodes, days=days, titles=titles)
+    launch = LAUNCH.format(history=history, episodes=episodes, titles=titles)
     for tid, show, day, votes, rating_x10, siblings_votes, siblings_x10 in con.execute(
-        launch, params
+        launch, params | {"days": sorted(days)}
     ).fetchall():
         found.append(
             Flag(

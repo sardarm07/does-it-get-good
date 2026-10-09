@@ -1,50 +1,23 @@
 from collections.abc import Iterable, Iterator
-from datetime import date, timedelta
+from datetime import date
 
 import duckdb
 import numpy as np
 import pytest
 
 from getgood.analysis.bombs import Flag, Kind, find_flags, group, rank
+from tests.helpers import Row, burst, day, season, steady
 
-type Row = tuple[int, date, float, int]
-"""A title's rating and votes on one day."""
-
-START = date(2023, 1, 1)
 SHOW = 1
 
 
-def day(n: int) -> date:
-    return START + timedelta(days=n)
-
-
-def steady(tid: int, days: Iterable[int], *, votes: int, pace: int, rating: float) -> list[Row]:
-    """A title gaining `pace` votes a day from `votes` on its first day, at one rating."""
-    days = list(days)
-    return [(tid, day(n), rating, votes + pace * (n - days[0])) for n in days]
-
-
-def burst(rows: list[Row], at: int, extra: int, rating: float) -> list[Row]:
-    """The same title with `extra` votes arriving on day `at`, after which it rates `rating`."""
-    return [(t, d, rating, v + extra) if d >= day(at) else (t, d, r, v) for t, d, r, v in rows]
-
-
-def season(bombed: int, *, rating: float = 7.0) -> tuple[list[Row], list[tuple[int, int, int]]]:
-    """A series page and five weekly episodes from day 10, all watched through day 59.
-
-    Episode `bombed` draws about three times its siblings' votes at `rating`; the others rate
-    8.7 to 9.1.
-    """
-    rows = steady(SHOW, range(60), votes=50_000, pace=100, rating=8.5)
-    episodes: list[tuple[int, int, int]] = []
-    for k in range(1, 6):
-        first = 10 + 7 * (k - 1)
-        if k == bombed:
-            rows += steady(100 + k, range(first, 60), votes=3_000, pace=2_000, rating=rating)
-        else:
-            rows += steady(100 + k, range(first, 60), votes=1_000, pace=500, rating=8.6 + k / 10)
-        episodes.append((100 + k, SHOW, 1))
-    return rows, episodes
+def five_episodes(
+    bombed: int, *, rating: float = 7.0
+) -> tuple[list[Row], list[tuple[int, int, int]]]:
+    """A series page and five weekly episodes from day 10; episode `bombed` draws a crowd."""
+    tids = [101, 102, 103, 104, 105]
+    rows = season(SHOW, tids, bombed=100 + bombed, rating=rating)
+    return rows, [(t, SHOW, 1) for t in tids]
 
 
 @pytest.fixture
@@ -75,8 +48,8 @@ def flags(
     con.execute("CREATE OR REPLACE TABLE eps (tid INT, series INT, season INT)")
     for episode in episodes:
         con.execute("INSERT INTO eps VALUES (?, ?, ?)", episode)
-    con.execute("CREATE OR REPLACE TABLE days AS SELECT DISTINCT date FROM hist")
-    return find_flags(con, "hist", "eps", "days", since=since, until=until)
+    days = {r[1] for r in rows}
+    return find_flags(con, "hist", "eps", days, since=since, until=until)
 
 
 def flag(
@@ -199,7 +172,7 @@ def test_since_and_until_choose_the_days_but_not_the_baseline(
 def test_an_episode_far_ahead_of_its_season_at_launch_is_a_bomb(
     con: duckdb.DuckDBPyConnection,
 ) -> None:
-    rows, episodes = season(bombed=3)
+    rows, episodes = five_episodes(bombed=3)
 
     found = flags(con, rows, episodes)
 
@@ -214,13 +187,13 @@ def test_an_episode_far_ahead_of_its_season_at_launch_is_a_bomb(
 
 
 def test_a_crowd_for_a_better_rated_episode_is_no_bomb(con: duckdb.DuckDBPyConnection) -> None:
-    rows, episodes = season(bombed=3, rating=9.5)
+    rows, episodes = five_episodes(bombed=3, rating=9.5)
 
     assert flags(con, rows, episodes) == []
 
 
 def test_an_episode_that_arrived_unseen_is_not_compared(con: duckdb.DuckDBPyConnection) -> None:
-    rows, episodes = season(bombed=3)
+    rows, episodes = five_episodes(bombed=3)
     # the history misses days 20 to 23, so episode 3 might have arrived any time after day 19
     rows = [r for r in rows if not day(20) <= r[1] <= day(23)]
 
