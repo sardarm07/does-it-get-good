@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--title--></title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.1);
+    --rating: #2a78d6;
+    --level: #eb6834;
+    --bomb: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.1);
+      --rating: #3987e5;
+      --level: #d95926;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --rating: #3987e5;
+    --level: #d95926;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 40px; }
+  h1 { font-size: 24px; line-height: 1.25; margin: 0; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .meta, .reason, .sub, footer { color: var(--ink-2); }
+  .meta { margin: 4px 0 0; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 16px;
+  }
+  .headline { font-size: 19px; font-weight: 600; margin: 0; }
+  .reason { margin: 4px 0 0; }
+  .facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 2px 16px;
+    margin: 12px 0 0;
+    font-size: 14px;
+  }
+  .facts dt { color: var(--ink-2); }
+  .facts dd { margin: 0; }
+  .sub { font-size: 13px; margin: 2px 0 8px; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    margin: 0 0 4px;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .legend svg { vertical-align: -2px; margin-right: 6px; overflow: visible; }
+  figure { margin: 0; }
+  figure svg { --plot-background: var(--surface); }
+  details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
+  .table-wrap { overflow-x: auto; }
+  table {
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  th, td { padding: 3px 14px 3px 0; text-align: right; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child, th:last-child, td:last-child { text-align: left; }
+  th { color: var(--ink-2); font-weight: 600; }
+  footer { font-size: 13px; margin-top: 24px; }
+  footer p { margin: 4px 0; }
+  .error { color: var(--bomb); font-weight: 600; }
+</style>
+<script src="vendor/d3.min.js"></script>
+<script src="vendor/plot.umd.min.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title"></h1>
+    <p class="meta" id="meta"></p>
+  </header>
+  <section class="card">
+    <p class="headline" id="headline"></p>
+    <p class="reason" id="reason"></p>
+    <dl class="facts" id="facts"></dl>
+  </section>
+  <section class="card">
+    <h2>Episode ratings</h2>
+    <p class="sub">Each dot is an episode, in order. The lines are the averages of the stretches the ratings split into.</p>
+    <ul class="legend" id="episodes-legend"></ul>
+    <figure id="episodes"></figure>
+  </section>
+  <section class="card">
+    <h2>Votes per episode</h2>
+    <p class="sub">An episode with few votes can rate high or low by chance, so those ratings are pulled toward the show's average before anything is judged.</p>
+    <figure id="votes"></figure>
+  </section>
+  <section class="card" id="history-card" hidden>
+    <h2>The series page, day by day</h2>
+    <p class="sub" id="history-sub"></p>
+    <ul class="legend" id="history-legend"></ul>
+    <figure id="page-rating"></figure>
+    <figure id="page-votes"></figure>
+  </section>
+  <section class="card">
+    <details>
+      <summary>Every episode as a table</summary>
+      <div class="table-wrap"><table id="table"></table></div>
+    </details>
+  </section>
+  <footer>
+    <p id="source"></p>
+    <p id="credit"></p>
+  </footer>
+</main>
+<script type="application/json" id="answer"><!--answer--></script>
+<script>
+"use strict";
+
+const answer = JSON.parse(document.getElementById("answer").textContent);
+const fmt = d3.format(",");
+const MARGIN = {top: 28, right: 16, bottom: 28, left: 60};
+const KIND_NAMES = {bomb: "Review bombs", boost: "Boosts", suspicious: "Vote surges"};
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function setText(id, value) {
+  document.getElementById(id).textContent = value;
+}
+
+// The episodes, with what the answer says about each.
+const episodes = answer.episodes.map(([season, number, ratingX10, votes, dampedX100], i) => ({
+  i, season, number, label: `S${season}E${number}`,
+  rating: ratingX10 / 10, votes, damped: dampedX100 / 100, notes: [],
+}));
+const index = new Map(episodes.map((e) => [e.label, e.i]));
+const stretches = answer.stretches.map((s) => ({...s, x1: index.get(s.from), x2: index.get(s.to)}));
+for (const s of stretches) {
+  for (let i = s.x1; i <= s.x2; i++) episodes[i].stretch = s;
+}
+const slumps = answer.slumps.map((s) => ({...s, x1: index.get(s.from), x2: index.get(s.to)}));
+for (const label of answer.low_points) episodes[index.get(label)].notes.push("low point");
+for (const c of answer.contested) {
+  episodes[index.get(c.episode)].notes.push(
+    `contested: ${(c.votes / c.neighbour_votes).toFixed(1)}× its neighbours' votes, ` +
+    `rated ${(c.neighbour_rating - c.rating).toFixed(1)} below them`);
+}
+const marked = episodes.filter((e) => e.notes.length);
+const seasons = d3.groups(episodes, (e) => e.season).map(([season, list]) => ({
+  season, first: list[0].i, last: list[list.length - 1].i,
+}));
+const turn = answer.verdict.kind === "gets_good" ? index.get(answer.verdict.at) : undefined;
+
+function header() {
+  const s = answer.series;
+  setText("title", `${s.title} (${s.years})`);
+  const files = answer.as_of ? `IMDb's files of ${answer.as_of}` : "IMDb's files";
+  setText("meta", `${s.id} · ${fmt(episodes.length)} rated episodes · ${files}`);
+  setText("headline", `${answer.verdict.headline} (${answer.verdict.confidence} confidence)`);
+  setText("reason", answer.verdict.reason);
+  const facts = document.getElementById("facts");
+  const fact = (name, items) => {
+    const dt = document.createElement("dt");
+    dt.textContent = name;
+    const dd = document.createElement("dd");
+    for (const [n, item] of (items.length ? items : ["none"]).entries()) {
+      if (n) dd.append(document.createElement("br"));
+      dd.append(item);
+    }
+    facts.append(dt, dd);
+  };
+  fact("Slumps", answer.slumps.map((x) =>
+    `${x.from}–${x.to}, ${(-x.delta).toFixed(1)} below its usual level` +
+    (x.recovered ? "" : ", no recovery")));
+  fact("Low points", answer.low_points.length ? [answer.low_points.join(", ")] : []);
+  fact("Contested", answer.contested.map((c) =>
+    `${c.episode}, ${(c.votes / c.neighbour_votes).toFixed(1)}× its neighbours' votes, ` +
+    `rated ${(c.neighbour_rating - c.rating).toFixed(1)} below them`));
+  const h = answer.history;
+  if (!h) {
+    fact("Review bombs", ["unknown: the history is empty until getgood sync"]);
+    return;
+  }
+  for (const kind of ["bomb", "boost", "suspicious"]) {
+    const events = h.events.filter((e) => e.kind === kind);
+    if (kind === "bomb" || events.length) {
+      fact(KIND_NAMES[kind], events.map((e) =>
+        `${e.from === e.to ? e.from : `${e.from} to ${e.to}`}, ${e.summary}`));
+    }
+  }
+  fact("History", [`${fmt(h.days)} days from ${h.first} to ${h.last}`]);
+}
+
+function legend(id, items) {
+  const list = document.getElementById(id);
+  list.replaceChildren();
+  for (const [draw, name] of items) {
+    const item = document.createElement("li");
+    const key = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    key.setAttribute("width", "18");
+    key.setAttribute("height", "12");
+    key.innerHTML = draw;
+    item.append(key, name);
+    list.append(item);
+  }
+}
+
+// Season ticks, thinned so their labels never overlap.
+function seasonTicks(width) {
+  const perSeason = (width - MARGIN.left - MARGIN.right) / Math.max(1, seasons.length);
+  const every = Math.ceil(30 / perSeason);
+  return seasons.filter((s, n) => n % every === 0).map((s) => s.first);
+}
+
+function episodeX(width) {
+  return {
+    domain: [-0.5, episodes.length - 0.5],
+    ticks: seasonTicks(width),
+    tickFormat: (i) => `S${episodes[i].season}`,
+    tickSize: 0,
+    label: null,
+  };
+}
+
+function tipText(e) {
+  const lines = [e.label, `Rating ${e.rating.toFixed(1)} · ${fmt(e.votes)} votes`];
+  if (Math.abs(e.damped - e.rating) >= 0.05) lines.push(`Judged as ${e.damped.toFixed(2)} after damping`);
+  if (e.stretch) lines.push(`Stretch ${e.stretch.from}–${e.stretch.to} averages ${e.stretch.level.toFixed(2)}`);
+  for (const note of e.notes) lines.push(note[0].toUpperCase() + note.slice(1));
+  return lines.join("\n");
+}
+
+function tipOptions() {
+  return {fill: css("--surface"), stroke: css("--axis"), textPadding: 8, fontSize: 12};
+}
+
+// Roughly how wide a line of 12px text is, to keep labels inside what they label.
+function textWidth(text) {
+  return text.length * 6.6;
+}
+
+function episodesChart(width) {
+  const perEpisode = (width - MARGIN.left - MARGIN.right) / episodes.length;
+  const slumpLabel = (s) => `Slump, ${(-s.delta).toFixed(1)} below`;
+  const labelled = slumps.filter((s) => (s.x2 - s.x1 + 1) * perEpisode >= textWidth(slumpLabel(s)) + 12);
+  const turnLabel = `Gets good at ${answer.verdict.at}`;
+  const turnLeft = turn !== undefined && (turn - 0.5) * perEpisode + textWidth(turnLabel) + 8 >
+    width - MARGIN.left - MARGIN.right;
+  const ratings = episodes.map((e) => e.rating);
+  const lo = Math.max(1, Math.floor((d3.min(ratings) - 0.3) * 2) / 2);
+  const hi = Math.min(10, Math.ceil((d3.max(ratings) + 0.3) * 2) / 2);
+  const r = episodes.length > 120 ? 3 : 4;
+  const ink = css("--ink");
+  const halo = {stroke: css("--surface"), strokeWidth: 4, paintOrder: "stroke"};
+  return Plot.plot({
+    width, height: 320, ...margins(),
+    style: {fontSize: "12px", color: css("--ink-2"), background: "transparent"},
+    x: episodeX(width),
+    y: {domain: [lo, hi], label: null, tickFormat: ".1f", ticks: 6},
+    marks: [
+      Plot.gridY({stroke: css("--grid"), strokeOpacity: 1}),
+      Plot.ruleX(seasons.slice(1), {x: (s) => s.first - 0.5, stroke: css("--grid")}),
+      Plot.rect(slumps, {x1: (s) => s.x1 - 0.5, x2: (s) => s.x2 + 0.5, y1: lo, y2: hi, fill: ink, fillOpacity: 0.06}),
+      Plot.text(labelled, {
+        x: (s) => (s.x1 + s.x2) / 2, y: hi, dy: -8, text: slumpLabel,
+        fill: css("--ink-2"), lineAnchor: "bottom",
+      }),
+      turn === undefined ? null : Plot.ruleX([turn - 0.5], {stroke: ink}),
+      turn === undefined ? null : Plot.text([turn - 0.5], {
+        x: (d) => d, y: hi, dx: turnLeft ? -4 : 4, dy: 2, text: () => turnLabel,
+        textAnchor: turnLeft ? "end" : "start", lineAnchor: "top", fill: ink, fontWeight: 600,
+        ...halo,
+      }),
+      Plot.link(stretches, {
+        x1: (s) => s.x1 - 0.4, x2: (s) => s.x2 + 0.4, y1: "level", y2: "level",
+        stroke: css("--level"), strokeWidth: 2, strokeLinecap: "round",
+      }),
+      Plot.dot(episodes, {x: "i", y: "rating", r, fill: css("--rating"), stroke: css("--surface"), strokeWidth: 1.5}),
+      Plot.dot(marked, {x: "i", y: "rating", r: r + 4, stroke: ink, strokeWidth: 1.5, fill: "none"}),
+      Plot.text(marked, {
+        x: "i", y: "rating", dy: r + 14, text: (e) => `${e.label}`, fill: ink, ...halo,
+      }),
+      Plot.ruleX(episodes, Plot.pointerX({x: "i", stroke: css("--axis")})),
+      Plot.tip(episodes, Plot.pointerX({x: "i", y: "rating", title: tipText, ...tipOptions()})),
+    ],
+  });
+}
+
+function votesChart(width) {
+  const perEpisode = (width - MARGIN.left - MARGIN.right) / episodes.length;
+  const half = Math.min(0.4, 12 / perEpisode);
+  const round = Math.min(4, perEpisode * half);
+  return Plot.plot({
+    width, height: 150, ...margins(), marginTop: 12,
+    style: {fontSize: "12px", color: css("--ink-2"), background: "transparent"},
+    x: episodeX(width),
+    y: {label: null, tickFormat: fmt, ticks: 4},
+    marks: [
+      Plot.gridY({stroke: css("--grid"), strokeOpacity: 1, ticks: 4}),
+      Plot.rectY(episodes, {
+        x1: (e) => e.i - half, x2: (e) => e.i + half, y: "votes",
+        fill: css("--rating"), ry2: round,
+      }),
+      Plot.ruleY([0], {stroke: css("--axis")}),
+      Plot.tip(episodes, Plot.pointerX({
+        x: "i", y: "votes", title: (e) => `${e.label}\n${fmt(e.votes)} votes`, ...tipOptions(),
+      })),
+    ],
+  });
+}
+
+function margins() {
+  return {
+    marginTop: MARGIN.top, marginRight: MARGIN.right,
+    marginBottom: MARGIN.bottom, marginLeft: MARGIN.left,
+  };
+}
+
+function table() {
+  const columns = ["Episode", "Rating", "Votes", "Judged as", "Stretch average", "Notes"];
+  const head = document.createElement("tr");
+  for (const name of columns) {
+    const th = document.createElement("th");
+    th.textContent = name;
+    head.append(th);
+  }
+  const rows = episodes.map((e) => {
+    const tr = document.createElement("tr");
+    const cells = [
+      e.label, e.rating.toFixed(1), fmt(e.votes), e.damped.toFixed(2),
+      e.stretch ? e.stretch.level.toFixed(2) : "", e.notes.join("; "),
+    ];
+    for (const value of cells) {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.append(td);
+    }
+    return tr;
+  });
+  document.getElementById("table").replaceChildren(head, ...rows);
+}
+
+function draw() {
+  const box = document.getElementById("episodes");
+  const width = Math.max(320, box.clientWidth);
+  const rating = css("--rating");
+  const level = css("--level");
+  const ink = css("--ink");
+  const items = [
+    [`<circle cx="9" cy="6" r="4" fill="${rating}"/>`, "Episode rating"],
+    [`<line x1="1" y1="6" x2="17" y2="6" stroke="${level}" stroke-width="2" stroke-linecap="round"/>`, "Stretch average"],
+  ];
+  if (marked.length) items.push([`<circle cx="9" cy="6" r="5.5" fill="none" stroke="${ink}" stroke-width="1.5"/>`, "Low point or contested episode"]);
+  if (slumps.length) items.push([`<rect x="1" y="0" width="16" height="12" fill="${ink}" fill-opacity="0.08"/>`, "Slump"]);
+  legend("episodes-legend", items);
+  box.replaceChildren(episodesChart(width));
+  document.getElementById("votes").replaceChildren(votesChart(width));
+}
+
+function fail(error) {
+  const note = document.createElement("p");
+  note.className = "error";
+  note.textContent = `The chart couldn't be drawn: ${error.message}`;
+  document.querySelector("main").prepend(note);
+  throw error;
+}
+
+try {
+  header();
+  table();
+  setText("source", `${answer.series.id} · ${answer.as_of ? `IMDb's files of ${answer.as_of}` : "IMDb's files"}`);
+  setText("credit", answer.credit);
+  draw();
+  let drawnAt = document.getElementById("episodes").clientWidth;
+  let pending = 0;
+  new ResizeObserver(() => {
+    const width = document.getElementById("episodes").clientWidth;
+    if (width === drawnAt) return;
+    drawnAt = width;
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => { try { draw(); } catch (error) { fail(error); } });
+  }).observe(document.querySelector("main"));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+} catch (error) {
+  fail(error);
+}
+</script>
+</body>
+</html>

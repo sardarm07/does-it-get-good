@@ -10,6 +10,7 @@ import typer
 
 from getgood import __version__, archive
 from getgood.backfill import Span, backfill, save_today, span
+from getgood.charts import write_page
 from getgood.config import CURRENT_DB, DATA_DIR, MAX_GAP_DAYS, RECENT_DAYS
 from getgood.duck import scalar
 from getgood.fetch import FetchError, fetch_all
@@ -178,9 +179,12 @@ def show(
         int | None, typer.Option(help="The year it started, to choose between namesakes.")
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the answer as JSON.")] = False,
+    chart: Annotated[
+        bool, typer.Option("--chart", help="Draw the answer on a page and open it in a browser.")
+    ] = False,
     data_dir: DataDir = DATA_DIR,
 ) -> None:
-    """Where a series gets good, where it slumps, and its low points."""
+    """Where a series gets good, where it slumps, its low points and its review bombs."""
     db = data_dir / CURRENT_DB
     if not db.exists():
         typer.echo("No data yet. Run getgood sync first.", err=True)
@@ -192,6 +196,10 @@ def show(
         typer.echo(json.dumps(result.to_json(), ensure_ascii=False, indent=2))
     else:
         typer.echo(result.to_text())
+    if chart:
+        page = write_page(result.to_json(), data_dir / "charts")
+        typer.echo(f"Chart: {page}", err=as_json)
+        typer.launch(page.resolve().as_uri())
 
 
 @app.command()

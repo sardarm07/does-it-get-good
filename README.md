@@ -36,6 +36,7 @@ Data lives in `data/` under the current directory, or wherever `GETGOOD_DATA` po
 getgood show "parks and rec"            # where it gets good, slumps and low points
 getgood show "the office" --year 2005   # choose between shows with the same name
 getgood show tt1234567 --json           # by IMDb ID, as JSON (see schema/answer.schema.json)
+getgood show "parks and rec" --chart    # the same answer drawn on a page in your browser
 getgood bombs                           # the biggest review bombs of the history's last 30 days
 getgood bombs --since 2023-01-01 --all  # since a date, with boosts and vote surges too
 ```
@@ -56,6 +57,8 @@ History:      1,412 days from 2022-02-21 to 2026-10-09
 
 Information courtesy of IMDb (https://www.imdb.com). Used with permission.
 ```
+
+`--chart` writes the answer to `data/charts/<id>.html` and opens it: every episode's rating with the stretches it splits into, the turn, slumps, low points and contested episodes marked, and the votes behind each rating. Hover an episode for its numbers, or open the table. The page works offline.
 
 Ratings with few votes are pulled toward the show's average before anything else happens, so a handful of votes can't create a turn. The verdict comes from splitting the episodes into flat stretches and reading the jumps between them; the reason line shows the numbers behind it.
 

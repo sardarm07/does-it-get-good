@@ -29,9 +29,10 @@
     "verdict": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "at", "confidence", "reason", "median", "sigma"],
+      "required": ["kind", "headline", "at", "confidence", "reason", "median", "sigma"],
       "properties": {
         "kind": {"enum": ["steady", "good_from_start", "gets_good", "no_clear_turn"]},
+        "headline": {"description": "The verdict in a few words, such as \"Gets good at S2E1\".", "type": "string"},
         "at": {
           "description": "Where it gets good, or where a show good from the start gets even better.",
           "anyOf": [{"$ref": "#/$defs/label"}, {"type": "null"}]
@@ -134,12 +135,13 @@
       "description": "Flags on one show no more than 2 days apart.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "from", "to", "titles", "series_wide", "extra_votes", "flags"],
+      "required": ["kind", "from", "to", "titles", "summary", "series_wide", "extra_votes", "flags"],
       "properties": {
         "kind": {"enum": ["bomb", "boost", "suspicious"]},
         "from": {"type": "string", "format": "date"},
         "to": {"type": "string", "format": "date"},
         "titles": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/title"}},
+        "summary": {"description": "The titles and what happened to them, as getgood show prints it.", "type": "string"},
         "series_wide": {"type": "boolean"},
         "extra_votes": {"type": "integer"},
         "flags": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/flag"}}

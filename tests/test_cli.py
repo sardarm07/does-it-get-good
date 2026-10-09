@@ -199,6 +199,28 @@ def test_show_json_matches_the_schema(data_dir: Path) -> None:
     assert data["history"] is None
 
 
+def test_show_chart_writes_the_page_and_opens_it(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path
+) -> None:
+    opened: list[str] = []
+
+    def fake_launch(url: str, wait: bool = False, locate: bool = False) -> int:
+        opened.append(url)
+        return 0
+
+    monkeypatch.setattr(cli.typer, "launch", fake_launch)
+
+    result = CliRunner().invoke(
+        app, ["show", "greys anatomy", "--chart", "--data-dir", str(data_dir)]
+    )
+
+    assert result.exit_code == 0, result.output
+    page = data_dir / "charts" / "tt0000001.html"
+    assert f"Chart: {page}" in result.output.splitlines()
+    assert opened == [page.resolve().as_uri()]
+    assert (data_dir / "charts" / "vendor" / "plot.umd.min.js").exists()
+
+
 def test_show_json_includes_the_history_and_matches_the_schema(bombed: Path) -> None:
     result = CliRunner().invoke(app, ["show", "tt0000001", "--json", "--data-dir", str(bombed)])
 

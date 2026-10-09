@@ -89,6 +89,7 @@ class Answer:
             },
             "verdict": {
                 "kind": v.kind,
+                "headline": self.headline,
                 "at": v.at,
                 "confidence": v.confidence,
                 "reason": v.reason,
@@ -141,6 +142,7 @@ class Answer:
             "from": e.start.isoformat(),
             "to": e.end.isoformat(),
             "titles": [self.label(t) for t in in_order(e.titles, self.labels)],
+            "summary": what(e, self.labels),
             "series_wide": e.series_wide,
             "extra_votes": round(e.extra_votes),
             "flags": [self._flag_json(f) for f in e.flags],
