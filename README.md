@@ -4,7 +4,7 @@ Find the episode where a TV series gets good, where it slumps, and when it got r
 
 `getgood` is a command-line tool for personal use. It works from IMDb's free non-commercial datasets and keeps everything it downloads on your own machine.
 
-> **Status:** early development. So far it only does `getgood --version`.
+> **Status:** early development. So far it downloads IMDb's files; verdicts come next.
 
 ## Setup
 
@@ -15,6 +15,14 @@ make setup                     # Python dependencies and pre-commit hooks
 uv tool install --editable .   # puts getgood on your PATH
 getgood --version
 ```
+
+## Usage
+
+```bash
+getgood sync                   # download IMDb's latest files (about 292 MB the first time)
+```
+
+A file that hasn't changed since the last sync is skipped. Data lives in `data/` under the current directory, or wherever `GETGOOD_DATA` points, and stays on your machine.
 
 ## Development
 
