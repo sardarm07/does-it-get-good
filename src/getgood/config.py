@@ -1,6 +1,7 @@
 """Paths, sources and tuning values in one place."""
 
 import os
+from datetime import date
 from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("GETGOOD_DATA", "data"))
@@ -11,6 +12,14 @@ IMDB_FILES = ("title.basics.tsv.gz", "title.episode.tsv.gz", "title.ratings.tsv.
 
 RETRY_WAITS = (5.0, 30.0, 120.0)
 """Seconds to wait before each retry after a 429, a 5xx or a dropped connection."""
+
+HISTORY_START = date(2022, 2, 22)
+"""The Internet Archive's near-daily copies of IMDb's ratings file begin here."""
+ARCHIVE_PAUSE = 2.0
+"""Seconds between requests to the Internet Archive, a non-profit."""
+ARCHIVE_WAITS = (60.0, 300.0, 900.0)
+"""Seconds to wait before each retry after a 429, a 5xx, an offline page or a dropped
+connection to the archive."""
 
 EXPECTED_COLUMNS = {
     "title.basics.tsv.gz": (
