@@ -1,5 +1,6 @@
 import re
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -9,13 +10,17 @@ from getgood.report import SERIES_PAGE
 from getgood.validation import (
     FACTS,
     covered,
+    draw_for_review,
     found_bomb,
     load_known_bombs,
     load_labels,
+    load_reviewed,
     misses,
+    score_review,
     touches,
+    write_reviewed,
 )
-from tests.helpers import day, show
+from tests.helpers import day, show, two_bombs
 
 
 def test_the_labels_file_is_well_formed() -> None:
@@ -120,3 +125,56 @@ def test_a_known_bomb_counts_only_if_the_history_saw_its_days() -> None:
     assert covered(known, {day(8), day(15)})
     assert not covered(known, {day(15)})  # nothing just before: an arrival is unseen
     assert not covered(known, {day(5), day(25)})
+
+
+def test_the_review_list_reads_back_as_written(tmp_path: Path) -> None:
+    entries = [
+        {
+            "id": "tt0000001",
+            "title": 'Grey\'s "Anatomy": Café',
+            "from": day(25),
+            "to": day(37),
+            "summary": "S1E3: at launch, up to 3.9× the votes",
+            "verdict": "real",
+            "note": "a note: with a colon",
+        }
+    ]
+
+    write_reviewed(entries, tmp_path / "reviewed.yaml")
+
+    assert load_reviewed(tmp_path / "reviewed.yaml") == entries
+
+
+def test_drawing_for_review_lists_each_bomb_once_and_keeps_verdicts(tmp_path: Path) -> None:
+    data = two_bombs(tmp_path / "data")
+    listed = tmp_path / "reviewed.yaml"
+
+    assert draw_for_review(data, 1, listed) == 1
+    first = load_reviewed(listed)
+    first[0]["verdict"] = "real"
+    write_reviewed(first, listed)
+    assert draw_for_review(data, 5, listed) == 1
+    assert draw_for_review(data, 5, listed) == 0
+
+    entries = load_reviewed(listed)
+    assert [(e["id"], e["from"], e["to"]) for e in entries] == [
+        ("tt0000001", day(25), day(37)),
+        ("tt0000001", day(50), day(50)),
+    ]
+    assert [e["verdict"] for e in entries].count("real") == 1
+
+
+def test_precision_counts_the_reviewed_bombs_still_found(tmp_path: Path) -> None:
+    data = two_bombs(tmp_path / "data")
+    listed = tmp_path / "reviewed.yaml"
+    draw_for_review(data, 2, listed)
+    entries = load_reviewed(listed)
+    entries[0]["verdict"], entries[1]["verdict"] = "real", "misread"
+    gone = {**entries[0], "from": day(5), "to": day(6), "verdict": "misread"}
+    write_reviewed([*entries, gone], listed)
+
+    assert score_review(data, listed) is False  # 1 of 2: the event no longer found isn't counted
+
+    entries[1]["verdict"] = "real"
+    write_reviewed([*entries, gone], listed)
+    assert score_review(data, listed) is True

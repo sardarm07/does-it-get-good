@@ -10,10 +10,11 @@ from pathlib import Path
 import duckdb
 
 from getgood.analysis.verdicts import Episode
-from getgood.config import EXPECTED_COLUMNS, IMDB_FILES
+from getgood.config import CURRENT_DB, EXPECTED_COLUMNS, IMDB_FILES
 from getgood.duck import quote
 from getgood.fetch import Download
 from getgood.history import DAYS, compact
+from getgood.load import build_current
 
 TODAY = date(2026, 10, 9)
 BASICS, EPISODE, RATINGS = IMDB_FILES
@@ -138,3 +139,17 @@ def write_history(history: Path, rows: Sequence[Row]) -> None:
             dest = history / DAYS / f"{d.isoformat()}.parquet"
             con.execute(f"COPY (SELECT * FROM d ORDER BY tid) TO {quote(dest)} (FORMAT parquet)")
     compact(history)
+
+
+def two_bombs(data_dir: Path) -> Path:
+    """Tables where every title has 1,000 votes, and a history with two review bombs on
+    Grey's Anatomy: S1E3 at launch, from day 25 to 37, and a burst of low votes on the
+    series page on day 50."""
+    raw = data_dir / "raw"
+    raw.mkdir(parents=True)
+    write_fixture(raw, votes=1_000)
+    build_current(raw, data_dir / CURRENT_DB, downloads(raw))
+    rows = season(1, [1_000_001 + k for k in range(6)], bombed=1_000_003)
+    page = burst([r for r in rows if r[0] == 1], at=50, extra=5_000, rating=8.2)
+    write_history(data_dir / "history", page + [r for r in rows if r[0] != 1])
+    return data_dir

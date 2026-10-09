@@ -15,7 +15,8 @@ from getgood.fetch import Download, FetchError
 from getgood.load import Build, build_current
 from getgood.search import Found, Match
 from getgood.validate import Finding, Report
-from tests.helpers import burst, downloads, season, write_fixture, write_history
+from tests import helpers
+from tests.helpers import downloads, season, write_fixture, write_history
 
 IMDB_DATE = "Fri, 09 Oct 2026 00:39:31 GMT"
 
@@ -254,16 +255,7 @@ def test_show_json_includes_the_history_and_matches_the_schema(bombed: Path) -> 
 
 @pytest.fixture
 def two_bombs(tmp_path: Path) -> Path:
-    """Tables where every title has 1,000 votes, and a history with two review bombs on
-    Grey's Anatomy: S1E3 at launch, and a burst of low votes on the series page on day 50."""
-    raw = tmp_path / "raw"
-    raw.mkdir()
-    write_fixture(raw, votes=1_000)
-    build_current(raw, tmp_path / CURRENT_DB, downloads(raw))
-    rows = season(1, [1_000_001 + k for k in range(6)], bombed=1_000_003)
-    page = burst([r for r in rows if r[0] == 1], at=50, extra=5_000, rating=8.2)
-    write_history(tmp_path / "history", page + [r for r in rows if r[0] != 1])
-    return tmp_path
+    return helpers.two_bombs(tmp_path)
 
 
 def test_bombs_lists_events_across_shows_newest_first(two_bombs: Path) -> None:
