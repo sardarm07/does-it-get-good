@@ -230,6 +230,8 @@ def test_show_json_includes_the_history_and_matches_the_schema(bombed: Path) -> 
     jsonschema.validate(data, schema, format_checker=jsonschema.FormatChecker())
     history = data["history"]
     assert (history["days"], history["first"], history["last"]) == (60, "2023-01-01", "2023-03-01")
+    assert history["page"][:2] == [["2023-01-01", 85, 50_000], ["2023-01-02", 85, 50_100]]
+    assert len(history["page"]) == 60
     [event] = history["events"]
     assert event["kind"] == "bomb"
     assert (event["from"], event["to"], event["titles"]) == ("2023-01-26", "2023-02-07", ["S1E3"])

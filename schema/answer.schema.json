@@ -81,12 +81,27 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["days", "first", "last", "events"],
+          "required": ["days", "first", "last", "events", "page_columns", "page"],
           "properties": {
             "days": {"type": "integer", "minimum": 1},
             "first": {"type": "string", "format": "date"},
             "last": {"type": "string", "format": "date"},
-            "events": {"type": "array", "items": {"$ref": "#/$defs/event"}}
+            "events": {"type": "array", "items": {"$ref": "#/$defs/event"}},
+            "page_columns": {"const": ["date", "rating_x10", "votes"]},
+            "page": {
+              "description": "The series' own page on each day the history holds it, in date order.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {"type": "string", "format": "date"},
+                  {"type": "integer", "minimum": 10, "maximum": 100},
+                  {"type": "integer", "minimum": 0}
+                ],
+                "items": false,
+                "minItems": 3
+              }
+            }
           }
         }
       ]

@@ -33,6 +33,8 @@ EPISODES = """
     ORDER BY e.season, e.episode, e.tid
 """
 TITLES = "SELECT tid, season, episode FROM episodes WHERE series = ? ORDER BY season, episode"
+PAGE_DAYS = "SELECT date, rating_x10, votes FROM {history} WHERE tid = ? ORDER BY date"
+PAGE_COLUMNS = ("date", "rating_x10", "votes")
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,8 @@ class History:
     first: date
     last: date
     events: tuple[Event, ...]
+    page: tuple[tuple[date, int, int], ...] = ()
+    """The series page's date, rating x 10 and votes, for each day the history holds it."""
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,8 @@ class Answer:
                 "first": h.first.isoformat(),
                 "last": h.last.isoformat(),
                 "events": [self._event_json(e) for e in h.events],
+                "page_columns": list(PAGE_COLUMNS),
+                "page": [[d.isoformat(), r, v] for d, r, v in h.page],
             },
             "stretches": [
                 {
@@ -303,4 +309,6 @@ def history_of(
         return None
     titles = "tid IN (" + ", ".join(str(t) for t in labels) + ")"
     flags = find_flags(con, relation, "episodes", days, where=titles)
-    return History(len(days), min(days), max(days), tuple(group(flags)))
+    series = next(t for t, name in labels.items() if name == SERIES_PAGE)
+    page = con.execute(PAGE_DAYS.format(history=relation), [series]).fetchall()
+    return History(len(days), min(days), max(days), tuple(group(flags)), tuple(page))

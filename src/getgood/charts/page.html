@@ -187,6 +187,36 @@ const seasons = d3.groups(episodes, (e) => e.season).map(([season, list]) => ({
 }));
 const turn = answer.verdict.kind === "gets_good" ? index.get(answer.verdict.at) : undefined;
 
+// The series page by day, and the events, for the history charts.
+const DAY = 86400000;
+const MAX_GAP_DAYS = 3;
+const utc = (iso) => new Date(`${iso}T00:00:00Z`);
+const day = d3.utcFormat("%Y-%m-%d");
+const pageDays = (answer.history ? answer.history.page : []).map(([date, ratingX10, votes]) => ({
+  date: utc(date), rating: ratingX10 / 10, votes,
+}));
+for (let n = 1; n < pageDays.length; n++) {
+  const before = pageDays[n - 1];
+  const now = pageDays[n];
+  now.days = Math.round((now.date - before.date) / DAY);
+  now.added = (now.votes - before.votes) / now.days;
+  now.since = before.date;
+}
+// The line breaks across a gap in the history rather than guess what happened in it.
+const pageLine = pageDays.flatMap((d) =>
+  d.days > MAX_GAP_DAYS ? [{date: new Date(+d.date - DAY), rating: NaN, added: NaN}, d] : [d]);
+// Days with a gap on both sides make no line, so they're drawn as dots.
+const isolated = pageDays.filter((d, n) =>
+  (n === 0 || d.days > MAX_GAP_DAYS) &&
+  (n === pageDays.length - 1 || pageDays[n + 1].days > MAX_GAP_DAYS));
+const timeX = () => ({
+  type: "utc", label: null,
+  domain: pageDays.length ? [pageDays[0].date, new Date(+pageDays[pageDays.length - 1].date + DAY)] : undefined,
+});
+const events = (answer.history ? answer.history.events : []).map((e) => ({
+  ...e, start: utc(e.from), end: new Date(+utc(e.to) + DAY),
+}));
+
 function header() {
   const s = answer.series;
   setText("title", `${s.title} (${s.years})`);
@@ -352,6 +382,98 @@ function margins() {
   };
 }
 
+function eventFill(e) {
+  return e.kind === "bomb" ? css("--bomb") : css("--ink");
+}
+
+function eventMarks(lo, hi) {
+  return [
+    Plot.rect(events, {
+      x1: "start", x2: "end", y1: lo, y2: hi,
+      fill: eventFill, fillOpacity: (e) => (e.kind === "bomb" ? 0.14 : 0.07),
+    }),
+    // A one-day event is under a pixel wide on a span of years, so each also gets a rule.
+    Plot.ruleX(events, {x: "start", stroke: eventFill, strokeWidth: 2, strokeOpacity: 0.6}),
+  ];
+}
+
+function dayTip(d) {
+  const lines = [day(d.date), `Rating ${d.rating.toFixed(1)} · ${fmt(d.votes)} votes`];
+  if (d.added !== undefined) {
+    lines.push(d.days === 1
+      ? `${fmt(Math.round(d.added))} votes added since the day before`
+      : `${fmt(Math.round(d.added))} votes a day over the ${d.days} days since ${day(d.since)}`);
+  }
+  for (const e of events.filter((e) => e.start <= d.date && d.date < e.end)) {
+    lines.push(`${KIND_NAMES[e.kind].slice(0, -1)}: ${e.summary}`);
+  }
+  return lines.join("\n");
+}
+
+function pageRatingChart(width) {
+  const ratings = pageDays.map((d) => d.rating);
+  const lo = Math.max(1, Math.floor((d3.min(ratings) - 0.2) * 2) / 2);
+  const hi = Math.min(10, Math.ceil((d3.max(ratings) + 0.2) * 2) / 2);
+  return Plot.plot({
+    width, height: 232, ...margins(), marginBottom: 40,
+    style: {fontSize: "12px", color: css("--ink-2"), background: "transparent"},
+    x: timeX(),
+    y: {domain: [lo, hi], label: null, tickFormat: ".1f", ticks: 5},
+    marks: [
+      Plot.gridY({stroke: css("--grid"), strokeOpacity: 1, ticks: 5}),
+      ...eventMarks(lo, hi),
+      Plot.line(pageLine, {x: "date", y: "rating", stroke: css("--rating"), strokeWidth: 2, curve: "step-after"}),
+      Plot.dot(isolated, {x: "date", y: "rating", r: 2, fill: css("--rating")}),
+      Plot.ruleX(pageDays, Plot.pointerX({x: "date", stroke: css("--axis")})),
+      Plot.tip(pageDays, Plot.pointerX({x: "date", y: "rating", title: dayTip, ...tipOptions()})),
+    ],
+  });
+}
+
+function pageVotesChart(width) {
+  const added = pageDays.filter((d) => d.added !== undefined);
+  const hi = Math.max(1, d3.max(added, (d) => d.added));
+  return Plot.plot({
+    width, height: 162, ...margins(), marginTop: 12, marginBottom: 40,
+    style: {fontSize: "12px", color: css("--ink-2"), background: "transparent"},
+    x: timeX(),
+    y: {domain: [Math.min(0, d3.min(added, (d) => d.added)), hi], label: null, tickFormat: fmt, ticks: 4},
+    marks: [
+      Plot.gridY({stroke: css("--grid"), strokeOpacity: 1, ticks: 4}),
+      ...eventMarks(0, hi),
+      Plot.areaY(pageLine.filter((d) => d.added !== undefined), {
+        x: "date", y: "added", fill: css("--rating"), fillOpacity: 0.12, curve: "step-before",
+      }),
+      Plot.line(pageLine.filter((d) => d.added !== undefined), {
+        x: "date", y: "added", stroke: css("--rating"), strokeWidth: 1.5, curve: "step-before",
+      }),
+      Plot.ruleY([0], {stroke: css("--axis")}),
+      Plot.ruleX(added, Plot.pointerX({x: "date", stroke: css("--axis")})),
+      Plot.tip(added, Plot.pointerX({x: "date", y: "added", title: dayTip, ...tipOptions()})),
+    ],
+  });
+}
+
+function drawHistory(width) {
+  const card = document.getElementById("history-card");
+  card.hidden = pageDays.length < 2;
+  if (card.hidden) return;
+  const h = answer.history;
+  setText("history-sub",
+    `The rating of the series' own page and the votes it gained each day, over ${fmt(h.days)} ` +
+    `days from ${h.first} to ${h.last}. Shaded: the events found on the show's titles; hover for each.`);
+  const items = [[`<line x1="1" y1="6" x2="17" y2="6" stroke="${css("--rating")}" stroke-width="2"/>`, "Series page"]];
+  if (events.some((e) => e.kind === "bomb")) {
+    items.push([`<rect x="1" y="0" width="16" height="12" fill="${css("--bomb")}" fill-opacity="0.3"/>`, "Review bomb"]);
+  }
+  if (events.some((e) => e.kind !== "bomb")) {
+    items.push([`<rect x="1" y="0" width="16" height="12" fill="${css("--ink")}" fill-opacity="0.12"/>`, "Boost or vote surge"]);
+  }
+  legend("history-legend", items);
+  document.getElementById("page-rating").replaceChildren(pageRatingChart(width));
+  document.getElementById("page-votes").replaceChildren(pageVotesChart(width));
+}
+
 function table() {
   const columns = ["Episode", "Rating", "Votes", "Judged as", "Stretch average", "Notes"];
   const head = document.createElement("tr");
@@ -391,6 +513,7 @@ function draw() {
   legend("episodes-legend", items);
   box.replaceChildren(episodesChart(width));
   document.getElementById("votes").replaceChildren(votesChart(width));
+  drawHistory(width);
 }
 
 function fail(error) {
