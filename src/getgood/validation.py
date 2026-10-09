@@ -5,9 +5,12 @@ import argparse
 import json
 import random
 import re
+import subprocess
 import sys
+import time
 from collections.abc import Collection, Mapping, Sequence
 from datetime import date, timedelta
+from itertools import groupby
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +20,10 @@ import yaml
 from getgood.analysis.bombs import Event
 from getgood.analysis.verdicts import Episode, Verdict, judge
 from getgood.config import CURRENT_DB, DATA_DIR, MAX_GAP_DAYS
+from getgood.duck import scalar
 from getgood.history import known_days, source
 from getgood.report import EPISODES, history_of, label, labels_of, what, when
+from getgood.search import find
 from getgood.sweep import sweep
 
 LABELS = Path(__file__).resolve().parents[2] / "validation" / "turning_points.yaml"
@@ -35,6 +40,10 @@ BOMB_TARGET = 0.8
 SEASON = re.compile(r"S\d+")
 PRECISION_TARGET = 0.7
 """The share of reviewed review-bomb events, still found, that must be real: M3's gate."""
+COVERAGE_TARGET = 0.95
+"""The share of in-scope series that must get a verdict."""
+SPEED_TARGET = 2.0
+"""Seconds getgood show may take, from starting to printing the answer."""
 REVIEW_COUNT = 30
 """Events each `make review` adds to the list."""
 REVIEW_HEADER = """\
@@ -277,6 +286,71 @@ def score_review(data_dir: Path, path: Path = REVIEWED) -> bool:
     return found == 0 or real >= PRECISION_TARGET * found
 
 
+ALL_EPISODES = """
+    SELECT e.series, e.season, e.episode, r.rating_x10, r.votes
+    FROM episodes e JOIN ratings r USING (tid)
+    ORDER BY e.series, e.season, e.episode, e.tid
+"""
+SPEED_SHOWS = """
+    (SELECT s.tid FROM series s JOIN ratings r USING (tid) ORDER BY r.votes DESC LIMIT 1)
+    UNION ALL
+    (SELECT series FROM episodes GROUP BY series ORDER BY count(*) DESC LIMIT 1)
+"""
+
+
+def score_coverage(data_dir: Path) -> bool:
+    """How many in-scope series get a verdict: every one should, unless its data breaks a rule."""
+    failed: list[str] = []
+    judged = 0
+    with duckdb.connect(str(data_dir / CURRENT_DB), read_only=True) as con:
+        total: int = scalar(con, "SELECT count(*) FROM series")
+        for series, rows in groupby(con.execute(ALL_EPISODES).fetchall(), key=lambda r: r[0]):
+            try:
+                judge([Episode(s, n, r / 10, v) for _, s, n, r, v in rows])
+                judged += 1
+            except Exception as error:  # every failure is counted and the first few shown
+                failed.append(f"tt{series:07d}: {error!r}")
+    for line in failed[:5]:
+        print(f"FAIL  {line}")
+    print(f"{judged:,}/{total:,} in-scope series get a verdict (target {COVERAGE_TARGET:.0%})")
+    return judged >= COVERAGE_TARGET * total
+
+
+def score_search(data_dir: Path) -> bool:
+    """Whether each labelled show comes first when its name is typed in lower case."""
+    labels = load_labels()
+    hits = 0
+    with duckdb.connect(str(data_dir / CURRENT_DB), read_only=True) as con:
+        for entry in labels:
+            best = find(con, entry["title"].lower()).best
+            if best is not None and best.imdb_id == entry["id"]:
+                hits += 1
+            else:
+                got = f"{best.title} ({best.years}), {best.imdb_id}" if best else "nothing"
+                print(f"MISS  {entry['title'].lower()!r} found {got}")
+    print(f"{hits}/{len(labels)} labelled shows come first by their name in lower case")
+    return hits == len(labels)
+
+
+def score_speed(data_dir: Path) -> bool:
+    """How long getgood show takes for the most-voted series and the longest one."""
+    with duckdb.connect(str(data_dir / CURRENT_DB), read_only=True) as con:
+        shows = [f"tt{tid:07d}" for (tid,) in con.execute(SPEED_SHOWS).fetchall()]
+    slowest = 0.0
+    for show in shows:
+        started = time.perf_counter()
+        subprocess.run(
+            [sys.executable, "-m", "getgood", "show", show, "--data-dir", str(data_dir)],
+            check=True,
+            capture_output=True,
+        )
+        seconds = time.perf_counter() - started
+        slowest = max(slowest, seconds)
+        print(f"      getgood show {show}: {seconds:.2f} s")
+    print(f"slowest answer {slowest:.2f} s (target under {SPEED_TARGET:.0f} s)")
+    return slowest < SPEED_TARGET
+
+
 def main(argv: Sequence[str] | None = None, data_dir: Path = DATA_DIR) -> int:
     parser = argparse.ArgumentParser(prog="python -m getgood.validation")
     commands = parser.add_subparsers(dest="command")
@@ -291,7 +365,11 @@ def main(argv: Sequence[str] | None = None, data_dir: Path = DATA_DIR) -> int:
     bombs = score_bombs(data_dir)
     print()
     precision = score_review(data_dir)
-    return 0 if turning_points and bombs and precision else 1
+    print()
+    coverage = score_coverage(data_dir)
+    search = score_search(data_dir)
+    speed = score_speed(data_dir)
+    return 0 if all((turning_points, bombs, precision, coverage, search, speed)) else 1
 
 
 if __name__ == "__main__":

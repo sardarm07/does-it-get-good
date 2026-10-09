@@ -4,8 +4,11 @@ from pathlib import Path
 
 import pytest
 
+from getgood import validation
 from getgood.analysis.bombs import Event, Flag, Kind, group
 from getgood.analysis.verdicts import judge
+from getgood.config import CURRENT_DB
+from getgood.load import build_current
 from getgood.report import SERIES_PAGE
 from getgood.validation import (
     FACTS,
@@ -16,11 +19,14 @@ from getgood.validation import (
     load_labels,
     load_reviewed,
     misses,
+    score_coverage,
     score_review,
+    score_search,
+    score_speed,
     touches,
     write_reviewed,
 )
-from tests.helpers import day, show, two_bombs
+from tests.helpers import day, downloads, show, two_bombs, write_fixture
 
 
 def test_the_labels_file_is_well_formed() -> None:
@@ -178,3 +184,41 @@ def test_precision_counts_the_reviewed_bombs_still_found(tmp_path: Path) -> None
     entries[1]["verdict"] = "real"
     write_reviewed([*entries, gone], listed)
     assert score_review(data, listed) is True
+
+
+@pytest.fixture
+def tables(tmp_path: Path) -> Path:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    write_fixture(raw)
+    build_current(raw, tmp_path / CURRENT_DB, downloads(raw))
+    return tmp_path
+
+
+def test_every_series_in_scope_gets_a_verdict(
+    tables: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert score_coverage(tables)
+    assert "2/2 in-scope series get a verdict" in capsys.readouterr().out
+
+
+def test_search_reports_a_show_that_doesnt_come_first(
+    monkeypatch: pytest.MonkeyPatch, tables: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    labels = [
+        {"id": "tt0000001", "title": "Grey's Anatomy"},
+        {"id": "tt0000099", "title": "Café Noir"},
+    ]
+    monkeypatch.setattr(validation, "load_labels", lambda: labels)
+
+    assert not score_search(tables)
+    out = capsys.readouterr().out
+    assert "MISS  'café noir' found Café Noir (2020), tt0000004" in out
+    assert "1/2 labelled shows come first" in out
+
+
+def test_speed_is_timed_on_the_real_command(
+    tables: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert score_speed(tables)
+    assert "getgood show tt0000001:" in capsys.readouterr().out

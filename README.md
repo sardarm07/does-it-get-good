@@ -68,7 +68,7 @@ Review bombs come from the history. Each day, every title's new votes are compar
 
 ```bash
 make test                      # ruff, pyright and pytest with coverage; analysis/ must stay at 90%
-make validate                  # score verdicts and review bombs against validation/ (after a sync)
+make validate                  # score verdicts, bombs, search and speed against v1's targets (after a sync)
 make review                    # draw review-bomb events into validation/reviewed_events.yaml to mark
 make data                      # getgood sync --no-history
 make history                   # getgood sync
