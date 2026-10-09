@@ -229,3 +229,63 @@ def test_no_history_never_calls_the_archive(
     assert result.exit_code == 0, result.output
     assert archive_calls == []
     assert "History: saved IMDb's file of 2026-10-09" in result.output
+
+
+def last_run(data_dir: Path) -> dict[str, object]:
+    run: dict[str, object] = json.loads((data_dir / "runs.jsonl").read_text().splitlines()[-1])
+    return run
+
+
+def test_each_sync_is_logged(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    run_sync(monkeypatch, tmp_path, Report())
+
+    CliRunner().invoke(app, ["sync", "--data-dir", str(tmp_path)])
+
+    run = last_run(tmp_path)
+    assert run["outcome"] == "ok"
+    assert run["tables"] == {"series": 2, "rated_episodes": 12}
+    assert run["archive"] == {"added": 2, "skipped": 0}
+    assert run["files"] == {
+        "title.ratings.tsv.gz": {"changed": True, "as_of": "2026-10-09"},
+        "title.episode.tsv.gz": {"changed": False, "as_of": "2026-10-09"},
+    }
+
+
+def test_a_stopped_sync_is_logged_with_its_reason(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    problem = Finding("title.ratings.tsv.gz", "IDs that appear more than once: 3")
+    run_sync(monkeypatch, tmp_path, Report(findings=[problem]))
+
+    CliRunner().invoke(app, ["sync", "--data-dir", str(tmp_path)])
+
+    run = last_run(tmp_path)
+    assert run["outcome"] == "stopped"
+    assert run["reason"] == "title.ratings.tsv.gz: IDs that appear more than once: 3"
+
+
+def test_status_shows_the_tables_the_history_and_the_last_syncs(data_dir: Path) -> None:
+    sync_line = {
+        "started": "2026-10-09T21:40:00+00:00",
+        "outcome": "ok",
+        "seconds": 5.6,
+        "files": {"title.ratings.tsv.gz": {"changed": True}},
+        "history": {"days": 1},
+    }
+    (data_dir / "runs.jsonl").write_text(json.dumps(sync_line) + "\n")
+
+    result = CliRunner().invoke(app, ["status", "--data-dir", str(data_dir)])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == [
+        "Tables: 2 series, 12 rated episodes, IMDb's files of 2026-10-09",
+        "History: empty",
+        "Last syncs:",
+        "  2026-10-09 21:40  ok           5.6 s  1 file downloaded, history 1 day",
+    ]
+
+
+def test_status_before_any_sync(tmp_path: Path) -> None:
+    result = CliRunner().invoke(app, ["status", "--data-dir", str(tmp_path)])
+
+    assert result.output.splitlines() == ["Tables: none yet. Run getgood sync.", "History: empty"]

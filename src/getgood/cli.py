@@ -1,19 +1,21 @@
 """Command-line entry point: getgood <command>."""
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import duckdb
 import typer
 
 from getgood import __version__, archive
-from getgood.backfill import backfill, save_today, span
+from getgood.backfill import Span, backfill, save_today, span
 from getgood.config import CURRENT_DB, DATA_DIR, MAX_GAP_DAYS
+from getgood.duck import scalar
 from getgood.fetch import FetchError, fetch_all
 from getgood.load import build_current
 from getgood.report import answer
+from getgood.runs import log_run, recent_runs
 from getgood.search import Found, Match, find
 from getgood.validate import Finding, check_files, remember_good
 
@@ -58,12 +60,25 @@ def sync(
     ] = False,
 ) -> None:
     """Download IMDb's latest files, check them, rebuild the tables, and fill the history."""
+    started = datetime.now(UTC)
+    run: dict[str, Any] = {"started": started.isoformat(timespec="seconds"), "outcome": "stopped"}
+    try:
+        _sync(data_dir, no_history, run)
+        run["outcome"] = "ok"
+    finally:
+        run["seconds"] = round((datetime.now(UTC) - started).total_seconds(), 1)
+        log_run(data_dir, run)
+
+
+def _sync(data_dir: Path, no_history: bool, run: dict[str, Any]) -> None:
     raw_dir = data_dir / "raw"
     try:
         downloads = fetch_all(raw_dir)
     except FetchError as error:
+        run["reason"] = str(error)
         typer.echo(f"Sync stopped: {error}", err=True)
         raise typer.Exit(1) from error
+    run["files"] = {d.name: {"changed": d.changed, "as_of": d.as_of} for d in downloads}
     for d in downloads:
         what = f"downloaded {d.size / 1e6:.1f} MB" if d.changed else "unchanged"
         when = f"IMDb's file of {d.as_of}" if d.as_of else "no date from IMDb"
@@ -72,6 +87,7 @@ def sync(
     report = check_files(raw_dir, downloads, today=date.today())
     _print_findings(report.findings)
     if not report.ok:
+        run["reason"] = "; ".join(f"{f.file}: {f.message}" for f in report.findings if f.blocking)
         typer.echo("Sync stopped: these files won't be used until they pass.", err=True)
         raise typer.Exit(1)
     remember_good(raw_dir, downloads, report)
@@ -87,29 +103,70 @@ def sync(
     built = build_current(raw_dir, data_dir / CURRENT_DB, downloads)
     _print_findings(built.findings)
     if not built.ok:
+        run["reason"] = "; ".join(f"{f.file}: {f.message}" for f in built.findings if f.blocking)
         typer.echo("Sync stopped: the tables from the last sync were kept.", err=True)
         raise typer.Exit(1)
+    run["tables"] = {"series": built.series, "rated_episodes": built.rated_episodes}
     state = "already up to date" if built.skipped else "built"
     typer.echo(f"Tables {state}: {built.series:,} series, {built.rated_episodes:,} rated episodes")
 
     history, current = data_dir / "history", data_dir / CURRENT_DB
     if (day := save_today(raw_dir, history, current, downloads)) is not None:
+        run["saved_today"] = day
         typer.echo(f"History: saved IMDb's file of {day}")
     if not no_history:
         with archive.client() as http:
             filled = backfill(
                 http, history, current, data_dir / "archive", until=date.today(), say=typer.echo
             )
+        archived: dict[str, Any] = {"added": len(filled.added), "skipped": len(filled.skipped)}
+        run["archive"] = archived
         if filled.added:
             typer.echo(f"Archive: {len(filled.added):,} days added")
         for skipped in filled.skipped:
             typer.echo(f"Warning: archive {skipped}")
         if filled.stopped:
+            archived["stopped"] = filled.stopped
             typer.echo(
                 f"Warning: the archive stopped answering ({filled.stopped}). "
                 "Everything so far is kept, and the next sync carries on."
             )
-    _print_history(history)
+    s = _print_history(history)
+    run["history"] = {"days": s.days, "first": s.first, "last": s.last, "gaps": len(s.gaps)}
+
+
+@app.command()
+def status(data_dir: DataDir = DATA_DIR) -> None:
+    """The tables, the history, and the last few syncs."""
+    db = data_dir / CURRENT_DB
+    if db.exists():
+        with duckdb.connect(str(db), read_only=True) as con:
+            as_of = scalar(con, "SELECT value FROM meta WHERE key = 'as_of'")
+            series = scalar(con, "SELECT count(*) FROM series")
+            rated = scalar(con, "SELECT count(*) FROM episodes JOIN ratings USING (tid)")
+        typer.echo(f"Tables: {series:,} series, {rated:,} rated episodes, IMDb's files of {as_of}")
+    else:
+        typer.echo("Tables: none yet. Run getgood sync.")
+    _print_history(data_dir / "history")
+    runs = recent_runs(data_dir)
+    if runs:
+        typer.echo("Last syncs:")
+    for r in runs:
+        when = str(r.get("started", "?"))[:16].replace("T", " ")
+        what = r.get("reason") or _run_summary(r)
+        typer.echo(f"  {when}  {r.get('outcome', '?'):<7}  {r.get('seconds', 0):>7.1f} s  {what}")
+
+
+def _run_summary(run: dict[str, Any]) -> str:
+    files: dict[str, Any] = run.get("files", {})
+    changed = sum(1 for f in files.values() if f.get("changed"))
+    parts = [f"{changed} file{'' if changed == 1 else 's'} downloaded"]
+    if "archive" in run:
+        parts.append(f"{run['archive'].get('added', 0)} archive days added")
+    if "history" in run:
+        days = run["history"].get("days", 0)
+        parts.append(f"history {days:,} day{'' if days == 1 else 's'}")
+    return ", ".join(parts)
 
 
 @app.command()
@@ -157,16 +214,17 @@ def _choose(found: Found, name: str, *, ask: bool) -> Match:
         typer.echo(f"Choose a number from 1 to {len(found.choices)}.")
 
 
-def _print_history(history: Path) -> None:
+def _print_history(history: Path) -> Span:
     s = span(history)
     if not s.days:
         typer.echo("History: empty")
-        return
-    typer.echo(f"History: {s.days:,} days from {s.first} to {s.last}")
+        return s
+    typer.echo(f"History: {s.days:,} day{'' if s.days == 1 else 's'} from {s.first} to {s.last}")
     if s.gaps:
         listed = ", ".join(f"{a} to {b}" for a, b in s.gaps[:5])
         more = f" and {len(s.gaps) - 5} more" if len(s.gaps) > 5 else ""
         typer.echo(f"  gaps of more than {MAX_GAP_DAYS} days: {listed}{more}")
+    return s
 
 
 def _print_findings(findings: list[Finding]) -> None:
