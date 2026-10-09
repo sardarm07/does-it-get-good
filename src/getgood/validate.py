@@ -18,10 +18,10 @@ from getgood.config import (
     ROW_COUNT_TOLERANCE,
     STALE_AFTER_DAYS,
 )
+from getgood.duck import read_imdb
 from getgood.fetch import Download
 
 LAST_GOOD = "last_good.json"
-CSV_OPTIONS = "delim='\\t', header=true, nullstr='\\N', quote='', escape='', all_varchar=true"
 
 QUERIES = {
     "title.basics.tsv.gz": "SELECT count(*) AS rows FROM {src}",
@@ -111,9 +111,7 @@ def _check(
         if header != expected:
             was, now = ", ".join(expected), ", ".join(header)
             return [Finding(d.name, f"columns changed from {was} to {now}")]
-        quoted_path = str(d.path).replace("'", "''")
-        src = f"read_csv('{quoted_path}', {CSV_OPTIONS})"
-        result = con.sql(QUERIES[d.name].format(src=src, min_votes=MIN_VOTES))
+        result = con.sql(QUERIES[d.name].format(src=read_imdb(d.path), min_votes=MIN_VOTES))
         stats = dict(zip(result.columns, result.fetchone() or (), strict=True))
     except (OSError, EOFError, UnicodeDecodeError, duckdb.Error) as error:
         return [Finding(d.name, f"can't be read ({type(error).__name__}: {error})")]
@@ -154,21 +152,34 @@ def _check(
 def _row_count_change(d: Download, rows: int, previous: dict[str, Any]) -> list[Finding]:
     if not previous.get("rows"):
         return []
-    days = 1
-    if d.as_of is not None and previous.get("as_of"):
-        days = max(1, (d.as_of - date.fromisoformat(previous["as_of"])).days)
-    allowed = ROW_COUNT_TOLERANCE * max(1.0, days / ROW_COUNT_PERIOD_DAYS)
+    days = days_between(d.as_of, previous.get("as_of"))
+    allowed = allowance(ROW_COUNT_TOLERANCE, days)
     change = rows / previous["rows"] - 1
     if abs(change) <= allowed:
         return []
-    apart = f"{days} day{'' if days == 1 else 's'} apart"
     return [
         Finding(
             d.name,
             f"row count moved {change:+.1%} since the last good file ({previous['rows']:,} to "
-            f"{rows:,}); the limit is ±{allowed:.0%} for files {apart}",
+            f"{rows:,}); the limit is ±{allowed:.0%} for files {apart(days)}",
         )
     ]
+
+
+def days_between(newer: date | None, older: str | None) -> int:
+    """Whole days from an ISO date to a newer date; at least 1, and 1 when either is unknown."""
+    if newer is None or not older:
+        return 1
+    return max(1, (newer - date.fromisoformat(older)).days)
+
+
+def allowance(tolerance: float, days: int) -> float:
+    """The change allowed between two files: one tolerance per period between them, at least one."""
+    return tolerance * max(1.0, days / ROW_COUNT_PERIOD_DAYS)
+
+
+def apart(days: int) -> str:
+    return f"{days} day{'' if days == 1 else 's'} apart"
 
 
 def _read_last_good(raw_dir: Path) -> dict[str, dict[str, Any]]:

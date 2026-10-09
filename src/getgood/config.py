@@ -41,3 +41,16 @@ MIN_VOTES = 5
 
 STALE_AFTER_DAYS = 3
 """Warn when IMDb's newest file is older than this."""
+
+CURRENT_DB = "current.duckdb"
+"""Today's in-scope series, episodes and ratings, rebuilt by each sync."""
+
+MIN_RATED_EPISODES = 6
+"""A series needs this many rated, numbered episodes to be in scope."""
+EXCLUDED_GENRES = ("Talk-Show", "News", "Reality-TV", "Game-Show")
+"""Shows where "gets good" means little."""
+
+SCOPE_SIZE_TOLERANCE = 0.03
+"""How far the number of in-scope series may move between syncs, per ROW_COUNT_PERIOD_DAYS."""
+LOST_VOTES_TOLERANCE = 0.01
+"""Share of titles that may lose votes between syncs, per ROW_COUNT_PERIOD_DAYS."""

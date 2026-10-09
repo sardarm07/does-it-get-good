@@ -4,7 +4,7 @@ Find the episode where a TV series gets good, where it slumps, and when it got r
 
 `getgood` is a command-line tool for personal use. It works from IMDb's free non-commercial datasets and keeps everything it downloads on your own machine.
 
-> **Status:** early development. So far it downloads IMDb's files; verdicts come next.
+> **Status:** early development. So far it downloads and checks IMDb's files and builds its tables; verdicts come next.
 
 ## Setup
 
@@ -19,10 +19,12 @@ getgood --version
 ## Usage
 
 ```bash
-getgood sync                   # download IMDb's latest files (about 292 MB the first time)
+getgood sync                   # download, check and load IMDb's latest files (about 292 MB the first time)
 ```
 
-A file that hasn't changed since the last sync is skipped. Data lives in `data/` under the current directory, or wherever `GETGOOD_DATA` points, and stays on your machine.
+`sync` downloads only files IMDb has changed, checks them, and rebuilds `data/current.duckdb`: every scripted series and miniseries with 6 or more rated episodes, with their episodes and ratings. A file that fails a check stops the sync, and the tables from the last good sync are kept.
+
+Data lives in `data/` under the current directory, or wherever `GETGOOD_DATA` points, and stays on your machine.
 
 ## Development
 

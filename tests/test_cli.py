@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from getgood import __version__, cli
 from getgood.cli import app
 from getgood.fetch import Download, FetchError
+from getgood.load import Build
 from getgood.validate import Finding, Report
 
 IMDB_DATE = "Fri, 09 Oct 2026 00:39:31 GMT"
@@ -31,7 +32,9 @@ def fake_fetch_all(raw_dir: Path) -> list[Download]:
     ]
 
 
-def run_sync(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, report: Report) -> list[Report]:
+def run_sync(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, report: Report, built: Build | None = None
+) -> list[Report]:
     """Fake the downloads and checks for getgood sync; return the reports it remembers."""
     remembered: list[Report] = []
 
@@ -43,7 +46,12 @@ def run_sync(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, report: Report) ->
 
     monkeypatch.setattr(cli, "fetch_all", fake_fetch_all)
     monkeypatch.setattr(cli, "check_files", fake_check_files)
+
+    def fake_build_current(raw_dir: Path, db_path: Path, downloads: Sequence[Download]) -> Build:
+        return built or Build(series=2, rated_episodes=12)
+
     monkeypatch.setattr(cli, "remember_good", fake_remember_good)
+    monkeypatch.setattr(cli, "build_current", fake_build_current)
     return remembered
 
 
@@ -58,6 +66,7 @@ def test_sync_reports_each_file_and_the_checks(
         "title.ratings.tsv.gz: downloaded 8.7 MB (IMDb's file of 2026-10-09)",
         "title.episode.tsv.gz: unchanged (IMDb's file of 2026-10-09)",
         "Checks passed (1 file checked, 1 already checked)",
+        "Tables built: 2 series, 12 rated episodes",
     ]
     assert len(remembered) == 1
 
@@ -92,3 +101,13 @@ def test_sync_stops_when_a_download_fails(monkeypatch: pytest.MonkeyPatch, tmp_p
 
     assert result.exit_code == 1
     assert "Sync stopped: title.basics.tsv.gz: HTTP 404" in result.output
+
+
+def test_a_failed_build_stops_the_sync(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    problem = Finding("in-scope series", "count moved -50.0% since the last sync")
+    run_sync(monkeypatch, tmp_path, Report(), Build(findings=[problem]))
+    result = CliRunner().invoke(app, ["sync", "--data-dir", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "Problem: in-scope series: count moved -50.0% since the last sync" in result.output
+    assert "the tables from the last sync were kept" in result.output
