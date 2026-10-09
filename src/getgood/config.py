@@ -92,6 +92,33 @@ MEDIUM_CONFIDENCE_VOTES = 20
 
 MIN_BOMB_VOTES = 500
 """Titles with fewer votes are too thin to judge for bombs or contested episodes."""
+SURGE_Z = 8.0
+"""A surge: new votes per day this many robust standard deviations above the title's norm..."""
+SURGE_MIN_VOTES = 50
+SURGE_MIN_SHARE = 0.02
+"""...and at least the larger of 50 votes or 2% of the title's total, per day."""
+BASELINE_DAYS = 28
+"""History days before each day that set a title's normal pace."""
+MIN_BASELINE_DAYS = 7
+"""Fewer earlier days than this, and a title isn't judged against its own pace yet."""
+LAUNCH_DAYS = 14
+"""A title this new is judged against its siblings, not its own pace."""
+SHOCK_DROP = 0.2
+"""A surge is a bomb if the rating falls at least this much that day, a boost if it rises."""
+NEW_VOTES_ERROR = 1.0
+"""The new votes' average is shown only when IMDb's rounding leaves it good to this many
+points. It can't find bombs the rating change misses: being 3 points off the old rating
+within 1 point of error already moves the rating by 0.3."""
+LAUNCH_RATIO = 3.0
+"""A launch surge: this many times the median votes of the season's other episodes at the
+same age..."""
+LAUNCH_DROP = 0.5
+"""...with a rating at least this far below theirs."""
+EVENT_DAYS = 2
+"""Flags on one show this close together are one event."""
+SERIES_WIDE_EPISODES = 3
+"""An event touching this many episodes, or the series page, is series-wide."""
+
 CONTESTED_RATIO = 2.0
 """A contested episode has at least this many times its neighbours' median votes..."""
 CONTESTED_EDGE_RATIO = 3.0
