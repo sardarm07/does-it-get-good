@@ -53,6 +53,13 @@ EXCLUDED_GENRES = ("Talk-Show", "News", "Reality-TV", "Game-Show")
 DAMPING_K = 10.0
 """Votes' worth of the show's mean added to each episode: 10 votes moves an episode halfway."""
 
+MIN_STRETCH = 3
+"""Episodes in the shortest flat stretch PELT may find."""
+PENALTY_FACTOR = 3.0
+"""Each extra break costs PENALTY_FACTOR * sigma^2 * ln(n), so noise alone makes no breaks."""
+NOISE_FLOOR = 0.05
+"""Smallest episode-to-episode noise assumed; ratings are rounded to 0.1."""
+
 SCOPE_SIZE_TOLERANCE = 0.03
 """How far the number of in-scope series may move between syncs, per ROW_COUNT_PERIOD_DAYS."""
 LOST_VOTES_TOLERANCE = 0.01
