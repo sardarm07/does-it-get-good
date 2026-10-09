@@ -4,7 +4,7 @@ Find the episode where a TV series gets good, where it slumps, and when it got r
 
 `getgood` is a command-line tool for personal use. It works from IMDb's free non-commercial datasets and keeps everything it downloads on your own machine.
 
-> **Status:** early development. Verdicts work; rating history and review bombs come next.
+> **Status:** working towards v1. Verdicts, the rating history, review bombs and charts all work; the bomb thresholds are being checked against the full history before release.
 
 ## Setup
 
