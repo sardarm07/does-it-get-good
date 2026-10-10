@@ -116,9 +116,11 @@ NEW_VOTES_ERROR = 1.0
 """The new votes' average is shown only when IMDb's rounding leaves it good to this many
 points. It can't find bombs the rating change misses: being 3 points off the old rating
 within 1 point of error already moves the rating by 0.3."""
-LAUNCH_RATIO = 3.0
+LAUNCH_RATIO = 2.0
 """A launch surge: this many times the median votes of the season's other episodes at the
-same age..."""
+same age, the bar a contested episode clears..."""
+LAUNCH_FINALE_RATIO = 3.0
+"""...or this many for a season's last episode, which draws extra votes anyway..."""
 LAUNCH_DROP = 0.5
 """...with a rating at least this far below theirs."""
 PAGE_DROP = 0.5

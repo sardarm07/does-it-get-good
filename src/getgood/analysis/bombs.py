@@ -8,9 +8,9 @@ Three checks, all in SQL over the history, so one show and every show use the sa
   rating down is a bomb, one that lifts it is a boost, and one that leaves it where it was
   is suspicious.
 - Launch: an episode in its first 14 days has no pace of its own yet, so it's compared with
-  its season's other episodes at the same age. Far more votes and a far lower rating is a
-  bomb. Season premieres are left out on both sides: they always draw extra votes, and
-  lower ratings, from people who don't go on.
+  its season's other episodes at the same age. Twice their votes (three times for a season
+  finale) and a far lower rating is a bomb. Season premieres are left out on both sides:
+  they always draw extra votes, and lower ratings, from people who don't go on.
 - Page: a series page in its first 14 days is compared with its own episodes. Bombers rate
   the page without watching, so it falls below the episodes; it's a bomb when the gap is
   wide and takes a crowd of low votes to explain.
@@ -33,6 +33,7 @@ from getgood.config import (
     EVENT_DAYS,
     LAUNCH_DAYS,
     LAUNCH_DROP,
+    LAUNCH_FINALE_RATIO,
     LAUNCH_RATIO,
     MAX_GAP_DAYS,
     MIN_BASELINE_DAYS,
@@ -132,15 +133,20 @@ LAUNCH = f"""
             WHERE d.date < f.first_day AND d.date >= f.first_day - {MAX_GAP_DAYS}
         )
     ),
+    finales AS (
+        -- the season's last episode listed, so a season still airing has its finale ahead
+        SELECT series, season, max(episode) AS episode FROM {{episodes}} GROUP BY ALL
+    ),
     aged AS (
         SELECT h.tid, e.series, e.season, h.date,
                CAST(h.rating_x10 AS INTEGER) AS rating_x10, CAST(h.votes AS BIGINT) AS votes,
-               h.date - o.first_day AS age
+               h.date - o.first_day AS age, e.episode = f.episode AS finale
         FROM {{history}} h JOIN observed o USING (tid) JOIN {{episodes}} e USING (tid)
+        JOIN finales f ON f.series = e.series AND f.season = e.season
         WHERE h.date - o.first_day BETWEEN 1 AND {LAUNCH_DAYS - 1} AND e.episode > 1
     ),
     compared AS (
-        SELECT a.tid, a.series, a.date, a.votes, a.rating_x10,
+        SELECT a.tid, a.series, a.date, a.votes, a.rating_x10, a.finale,
                median(b.votes) AS siblings_votes,
                median(b.rating_x10) AS siblings_rating_x10
         FROM aged a
@@ -151,7 +157,8 @@ LAUNCH = f"""
     SELECT tid, series, date, votes, rating_x10, siblings_votes, siblings_rating_x10
     FROM compared
     WHERE votes >= {MIN_BOMB_VOTES}
-      AND votes >= {LAUNCH_RATIO} * siblings_votes
+      AND votes >= CASE WHEN finale THEN {LAUNCH_FINALE_RATIO} ELSE {LAUNCH_RATIO} END
+                   * siblings_votes
       AND rating_x10 <= siblings_rating_x10 - {round(LAUNCH_DROP * 10)}
       AND ($since IS NULL OR date >= $since)
       AND ($until IS NULL OR date <= $until)

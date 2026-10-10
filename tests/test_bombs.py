@@ -12,11 +12,13 @@ SHOW = 1
 
 
 def five_episodes(
-    bombed: int, *, rating: float = 7.0
+    bombed: int, *, rating: float = 7.0, crowd: float | None = None
 ) -> tuple[list[Row], list[tuple[int, int, int, int]]]:
-    """A series page and five weekly episodes from day 10; episode `bombed` draws a crowd."""
+    """A series page and five weekly episodes from day 10; episode `bombed` draws a crowd,
+    `crowd` times its siblings' votes at every age if given."""
     tids = [101, 102, 103, 104, 105]
-    rows = season(SHOW, tids, bombed=100 + bombed, rating=rating)
+    sized = {} if crowd is None else {"votes": round(1_000 * crowd), "pace": round(500 * crowd)}
+    rows = season(SHOW, tids, bombed=100 + bombed, rating=rating, **sized)
     return rows, [(t, SHOW, 1, k) for k, t in enumerate(tids, 1)]
 
 
@@ -206,6 +208,24 @@ def test_an_episode_far_ahead_of_its_season_at_launch_is_a_bomb(
     assert first.ratio == pytest.approx(5_000 / 1_500)
     assert first.extra_votes == 3_500
     assert first.rating_change == pytest.approx(7.0 - 9.0)  # against E2, E4 and E5
+
+
+def test_twice_its_siblings_votes_is_enough_for_an_episode_mid_season(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    rows, episodes = five_episodes(bombed=3, crowd=2.5)
+
+    found = flags(con, rows, episodes)
+
+    assert {(f.tid, f.check) for f in found} == {(103, "launch")}
+    assert found[0].ratio == pytest.approx(2.5)
+
+
+def test_a_season_finale_needs_three_times_its_siblings_votes(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    assert flags(con, *five_episodes(bombed=5, crowd=2.5)) == []
+    assert {(f.tid, f.check) for f in flags(con, *five_episodes(bombed=5))} == {(105, "launch")}
 
 
 def test_a_season_premiere_is_left_out_at_launch(con: duckdb.DuckDBPyConnection) -> None:

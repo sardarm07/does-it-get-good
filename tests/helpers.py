@@ -100,17 +100,26 @@ def burst(rows: list[Row], at: int, extra: int, rating: float) -> list[Row]:
     return [(t, d, rating, v + extra) if d >= day(at) else (t, d, r, v) for t, d, r, v in rows]
 
 
-def season(show: int, episodes: Sequence[int], bombed: int, *, rating: float = 7.0) -> list[Row]:
+def season(
+    show: int,
+    episodes: Sequence[int],
+    bombed: int,
+    *,
+    rating: float = 7.0,
+    votes: int = 3_000,
+    pace: int = 2_000,
+) -> list[Row]:
     """A series page and weekly episodes from day 10, all watched through day 59.
 
-    The episode with ID `bombed` draws over three times its siblings' votes at `rating`; the
-    others rate 8.7 upward, in order.
+    The episode with ID `bombed` starts with `votes` and gains `pace` a day at `rating`, over
+    three times its siblings' votes unless told otherwise; the others start with 1,000, gain
+    500 a day and rate 8.7 upward, in order.
     """
     rows = steady(show, range(60), votes=50_000, pace=100, rating=8.5)
     for k, tid in enumerate(episodes):
         first = 10 + 7 * k
         if tid == bombed:
-            rows += steady(tid, range(first, 60), votes=3_000, pace=2_000, rating=rating)
+            rows += steady(tid, range(first, 60), votes=votes, pace=pace, rating=rating)
         else:
             rows += steady(tid, range(first, 60), votes=1_000, pace=500, rating=8.7 + k / 10)
     return rows

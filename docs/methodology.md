@@ -117,9 +117,10 @@ Two kinds of day aren't judged against the title's own pace:
 **The launch check.** An episode in its first 14 days has no pace of its own, so it's
 compared with its season's other episodes at the same age, for episodes the history saw
 arrive (it holds a day within 3 days before the episode's first). On each of days 1 to 13,
-3 or more times their median votes and a rating 0.5 or more below their median is a
-review bomb. Season premieres are left out on both sides: they always draw more votes, and
-lower ratings, from people who don't go on.
+twice their median votes and a rating 0.5 or more below their median is a review bomb, the
+bar a contested episode clears; a season's last episode needs three times their votes,
+since finales draw extra votes anyway. Season premieres are left out on both sides: they
+always draw more votes, and lower ratings, from people who don't go on.
 
 **The page check.** A show bombed at its premiere has no siblings to compare with, but
 bombers rate the series page without watching, so the page falls below its own episodes.
@@ -145,7 +146,9 @@ looks at titles with 500 or more votes today, since votes only grow.
 **What it can't see.** IMDb's files have no breakdown of votes by star, so a bomb whose
 votes IMDb's own weighting absorbs, or that moves a big title's rating by less than 0.2,
 is a vote surge at most. A bomb in a gap of the archive's copies, or before 2022-02-22,
-isn't seen at all, and neither is a bomb that grows a small show's votes fivefold.
+isn't seen at all, and neither is a bomb that grows a small show's votes fivefold. Low
+ratings that come at the usual pace aren't a burst either: a season rated low from its
+first day on fewer votes than the last, or an episode whose rating slides for weeks.
 
 ## Validation
 
