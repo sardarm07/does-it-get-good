@@ -5,8 +5,8 @@ Three checks, all in SQL over the history, so one show and every show use the sa
 - Daily: a title with 500+ votes, at least 14 days into the history and not arriving (its
   votes don't grow fivefold within 14 days either side), is compared with its own pace over
   its last 28 history days (a robust z-score of new votes per day), on days the history
-  reached within 3 days of the last. A surge that drags the rating down is a bomb, one that
-  lifts it is a boost, and one that leaves it where it was is suspicious.
+  reached within 3 days of the last. A surge that drags the rating down on votes far below
+  it is a bomb, one that lifts it is a boost, and any other is suspicious.
 - Launch: an episode in its first 14 days has no pace of its own yet, so it's compared with
   its season's other episodes at the same age, when they have an audience of their own (a
   median of 200 votes). Twice their votes (three times for a season finale) and a far lower
@@ -30,6 +30,7 @@ import duckdb
 from getgood.config import (
     ARRIVAL_GROWTH,
     BASELINE_DAYS,
+    BOMB_GAP,
     CONTESTED_NEIGHBOUR_VOTES,
     EVENT_DAYS,
     LAUNCH_DAYS,
@@ -53,6 +54,7 @@ type Kind = Literal["bomb", "boost", "suspicious"]
 KINDS: tuple[Kind, ...] = ("bomb", "boost", "suspicious")
 type Check = Literal["daily", "launch", "page"]
 SHOCK_X10 = round(SHOCK_DROP * 10)
+BOMB_GAP_X10 = round(BOMB_GAP * 10)
 
 # Ratings are compared in tenths, as integers, so 8.3 - 8.5 is exactly -0.2.
 # {history}: (tid, date, rating_x10, votes); {episodes}: (tid, series, season, episode);
@@ -91,7 +93,11 @@ DAILY = f"""
                END AS new_votes_rating,
                CASE WHEN votes > prev_votes THEN
                    0.05 * (votes + prev_votes) / (votes - prev_votes)
-               END AS new_votes_error
+               END AS new_votes_error,
+               -- how far below the rating before them the new votes average, in tenths
+               CASE WHEN votes > prev_votes THEN
+                   (prev_rating_x10 - rating_x10) * votes / (votes - prev_votes)
+               END AS new_votes_below_x10
         FROM steps
         WHERE prev_date IS NOT NULL
     ),
@@ -107,7 +113,7 @@ DAILY = f"""
     SELECT s.tid, coalesce(e.series, s.tid) AS show, s.date, s.votes, s.rating_x10, s.dr_x10,
            (s.dv - s.base) * s.gap AS extra,
            (s.dv - s.base) / (1.4826 * s.spread + 1) AS z,
-           s.new_votes_rating, s.new_votes_error
+           s.new_votes_rating, s.new_votes_error, s.new_votes_below_x10
     FROM scored s LEFT JOIN {{episodes}} e USING (tid)
     WHERE s.votes >= {MIN_BOMB_VOTES}
       AND s.base_days >= {MIN_BASELINE_DAYS}
@@ -293,11 +299,27 @@ def daily_flags(
     """
     found: list[Flag] = []
     sql = DAILY.format(history=history, episodes=episodes, where=where)
-    for tid, show, day, votes, rating_x10, dr_x10, extra, z, new_rating, error in con.execute(
-        sql, {"since": since, "until": until}
-    ).fetchall():
+    for (
+        tid,
+        show,
+        day,
+        votes,
+        rating_x10,
+        dr_x10,
+        extra,
+        z,
+        new_rating,
+        error,
+        below,
+    ) in con.execute(sql, {"since": since, "until": until}).fetchall():
+        # when the new votes are a small share, the drop alone puts them far below; when
+        # they're a large share, their own average is known well enough to check
         kind: Kind = (
-            "bomb" if dr_x10 <= -SHOCK_X10 else "boost" if dr_x10 >= SHOCK_X10 else "suspicious"
+            "bomb"
+            if dr_x10 <= -SHOCK_X10 and below >= BOMB_GAP_X10
+            else "boost"
+            if dr_x10 >= SHOCK_X10
+            else "suspicious"
         )
         found.append(
             Flag(

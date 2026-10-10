@@ -111,7 +111,11 @@ arriving that day, like a show rated before its release and then released: its o
 pace says nothing about what's normal, so it isn't judged against it. Releases measured
 7 to 450 times over; the biggest bomb on a small show, 3."""
 SHOCK_DROP = 0.2
-"""A surge is a bomb if the rating falls at least this much that day, a boost if it rises."""
+"""A surge is a bomb if the rating falls at least this much that day, a boost if it rises..."""
+BOMB_GAP = 2.0
+"""...and a bomb's new votes average at least this far below the rating before them, as when
+about a fifth of them are 1s. Later viewers rate a show a little below its first fans, and on
+a small title a crowd of them moves the rating as far as a bomb would."""
 NEW_VOTES_ERROR = 1.0
 """The new votes' average is shown only when IMDb's rounding leaves it good to this many
 points. It can't find bombs the rating change misses: being 3 points off the old rating

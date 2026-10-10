@@ -79,22 +79,29 @@ def flag(
 def test_a_burst_of_low_votes_is_a_bomb(con: duckdb.DuckDBPyConnection) -> None:
     rows = steady(101, range(61), votes=1_000, pace=10, rating=8.5)
 
-    [found] = flags(con, burst(rows, at=40, extra=600, rating=8.0))
+    [found] = flags(con, burst(rows, at=40, extra=600, rating=7.5))
 
     assert (found.tid, found.show, found.day, found.kind) == (101, 101, day(40), "bomb")
     assert found.check == "daily"
-    assert found.rating_change == -0.5
+    assert found.rating_change == -1.0
     assert found.extra_votes == 600  # 610 that day against its usual 10
     assert found.z == 600
-    # 2,000 votes at 8.0 after 1,390 at 8.5: the 610 new ones average about 6.9
-    assert found.new_votes_rating == pytest.approx(6.86, abs=0.01)
+    # 2,000 votes at 7.5 after 1,390 at 8.5: the 610 new ones average about 5.2
+    assert found.new_votes_rating == pytest.approx(5.22, abs=0.01)
 
 
 @pytest.mark.parametrize(
     ("before", "after", "kind"),
-    [(8.5, 8.3, "bomb"), (7.0, 7.5, "boost"), (7.0, 7.2, "boost"), (8.5, 8.4, "suspicious")],
+    [
+        (8.5, 7.5, "bomb"),
+        # the 610 new votes average 7.8, only 0.7 below: a crowd, not a bomb
+        (8.5, 8.3, "suspicious"),
+        (7.0, 7.5, "boost"),
+        (7.0, 7.2, "boost"),
+        (8.5, 8.4, "suspicious"),
+    ],
 )
-def test_the_rating_change_on_the_day_decides_the_kind(
+def test_the_rating_change_and_the_new_votes_decide_the_kind(
     con: duckdb.DuckDBPyConnection, before: float, after: float, kind: Kind
 ) -> None:
     rows = steady(101, range(61), votes=1_000, pace=10, rating=before)
@@ -103,6 +110,15 @@ def test_the_rating_change_on_the_day_decides_the_kind(
 
     assert found.kind == kind
     assert found.rating_change == round(after - before, 1)
+
+
+def test_a_small_drop_on_a_big_title_is_a_bomb(con: duckdb.DuckDBPyConnection) -> None:
+    rows = steady(101, range(61), votes=100_000, pace=100, rating=8.5)
+
+    # 3,100 new votes take it from 8.5 to 8.3 on 107,000: they average about 1.6
+    [found] = flags(con, burst(rows, at=40, extra=3_000, rating=8.3))
+
+    assert found.kind == "bomb"
 
 
 def test_ordinary_ups_and_downs_raise_no_flags(con: duckdb.DuckDBPyConnection) -> None:

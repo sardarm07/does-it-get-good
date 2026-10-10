@@ -97,14 +97,20 @@ A surge is z of 8 or more, with at least the larger of 50 votes or 2% of the tit
 that day. Its kind comes from the rating that day, compared in tenths so 8.3 − 8.5 is
 exactly −0.2:
 
-- a drop of 0.2 or more is a **review bomb**;
+- a drop of 0.2 or more, on new votes averaging 2 points or more below the rating before
+  them, is a **review bomb**;
 - a rise of 0.2 or more is a **boost**;
 - otherwise it's a **vote surge**.
 
 The new votes' own average can be worked out from the rating and votes before and after,
 but IMDb rounds ratings to 0.1, which leaves an error of about 0.1 × votes ÷ new votes. It's
-shown when that error is under 1 point. It can't find a bomb the rating change misses:
-being 3 points below the old rating with 1 point of error already moves the rating by 0.3.
+shown when that error is under 1 point. A bomb's new votes must average 2 points below the
+rating before them, as when about a fifth of them are 1s: later viewers rate a show a little
+below its first fans, and on a small title a crowd of them can move the rating 0.2 on votes
+only a point lower, which is a vote surge. When the new votes are a small share of the
+total, their average is uncertain, but a 0.2 drop already puts it that far below. The
+average can't find a bomb the rating change misses: being 3 points below the old rating
+with 1 point of error already moves the rating by 0.3.
 
 Three kinds of day aren't judged against the title's own pace:
 
