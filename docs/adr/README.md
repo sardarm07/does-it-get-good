@@ -11,3 +11,4 @@ conversation they came from. Each says what was decided, why, and what it costs.
 | [0004](0004-local-only.md) | Keep IMDb's data on the user's machine |
 | [0005](0005-public-code-repo.md) | Publish the code, never the data |
 | [0006](0006-monthly-history-files.md) | Store the history as one Parquet file per month |
+| [0007](0007-history-sorted-by-series.md) | Sort the history by series |

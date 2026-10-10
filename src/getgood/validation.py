@@ -177,8 +177,9 @@ def score_bombs(data_dir: Path) -> bool:
                 print(f"skip  {name}: not covered by the history")
                 continue
             scored += 1
-            labels = labels_of(con, int(k["id"].removeprefix("tt")))
-            shown = history_of(con, history, labels)
+            series = int(k["id"].removeprefix("tt"))
+            labels = labels_of(con, series)
+            shown = history_of(con, history, series)
             hit = found_bomb(k, shown.events if shown else (), labels)
             found += hit is not None
             print(f"{'found' if hit else 'MISS '} {name}")
@@ -274,7 +275,7 @@ def score_review(data_dir: Path, path: Path = REVIEWED) -> bool:
     with duckdb.connect(str(data_dir / CURRENT_DB), read_only=True) as con:
         for entry in marked:
             name = f"{entry['title']}, {entry['from']} to {entry['to']}"
-            shown = history_of(con, history, labels_of(con, int(entry["id"].removeprefix("tt"))))
+            shown = history_of(con, history, int(entry["id"].removeprefix("tt")))
             events = shown.events if shown else ()
             if not any(e.kind == "bomb" and same_event(entry, e) for e in events):
                 print(f"gone    {name}: no longer found")
@@ -295,6 +296,9 @@ SPEED_SHOWS = """
     (SELECT s.tid FROM series s JOIN ratings r USING (tid) ORDER BY r.votes DESC LIMIT 1)
     UNION ALL
     (SELECT series FROM episodes GROUP BY series ORDER BY count(*) DESC LIMIT 1)
+    UNION ALL
+    (SELECT s.tid FROM series s JOIN ratings r USING (tid) WHERE s.start_year > ?
+     ORDER BY r.votes DESC LIMIT 1)
 """
 
 
@@ -333,9 +337,12 @@ def score_search(data_dir: Path) -> bool:
 
 
 def score_speed(data_dir: Path) -> bool:
-    """How long getgood show takes for the most-voted series and the longest one."""
+    """How long getgood show takes for the most-voted series, the longest one, and the
+    most-voted one that began after the history did, whose launch the bomb checks read."""
+    days = known_days(data_dir / "history")
+    began = min(days).year if days else date.max.year
     with duckdb.connect(str(data_dir / CURRENT_DB), read_only=True) as con:
-        shows = [f"tt{tid:07d}" for (tid,) in con.execute(SPEED_SHOWS).fetchall()]
+        shows = [f"tt{tid:07d}" for (tid,) in con.execute(SPEED_SHOWS, [began]).fetchall()]
     slowest = 0.0
     for show in shows:
         started = time.perf_counter()

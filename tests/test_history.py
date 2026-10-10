@@ -5,7 +5,7 @@ import duckdb
 import pytest
 
 from getgood.config import CURRENT_DB
-from getgood.history import DAYS, compact, gaps, known_days, source, write_day
+from getgood.history import DAYS, compact, gaps, known_days, source, upgrade, write_day
 from getgood.load import build_current
 from tests.helpers import RATINGS, downloads, write_fixture, write_imdb_file
 
@@ -46,7 +46,22 @@ def test_a_day_keeps_only_in_scope_titles(setup: tuple[Path, Path, Path]) -> Non
     assert list((history / DAYS).iterdir()) == [day_file]
 
 
-def test_days_fold_into_their_months_sorted_by_title(setup: tuple[Path, Path, Path]) -> None:
+def test_every_row_names_its_series(setup: tuple[Path, Path, Path]) -> None:
+    raw, current, history = setup
+
+    write_day(ratings_on(raw, 100), date(2023, 1, 30), history, current)
+
+    # a series page names itself; episode tt{show}00000{k} belongs to series tt000000{show}
+    day_file = history / DAYS / "2023-01-30.parquet"
+    misplaced = (
+        f"SELECT count(*) FROM '{day_file}' "
+        "WHERE series <> CASE WHEN tid < 1000000 THEN tid ELSE tid // 1000000 END"
+    )
+    assert rows(misplaced) == [(0,)]
+    assert rows(f"SELECT DISTINCT series FROM '{day_file}' ORDER BY 1") == [(1,), (4,)]
+
+
+def test_days_fold_into_their_months_sorted_by_series(setup: tuple[Path, Path, Path]) -> None:
     raw, current, history = setup
     for day, votes in ((date(2023, 12, 31), 100), (date(2024, 1, 1), 110), (date(2023, 12, 2), 90)):
         write_day(ratings_on(raw, votes), day, history, current)
@@ -58,7 +73,7 @@ def test_days_fold_into_their_months_sorted_by_title(setup: tuple[Path, Path, Pa
         "2024-01.parquet",
     ]
     assert list((history / DAYS).iterdir()) == []
-    ordered = rows(f"SELECT tid, date FROM '{history / '2023-12.parquet'}'")
+    ordered = rows(f"SELECT series, tid, date FROM '{history / '2023-12.parquet'}'")
     assert ordered == sorted(ordered)
     assert known_days(history) == {date(2023, 12, 2), date(2023, 12, 31), date(2024, 1, 1)}
 
@@ -100,6 +115,34 @@ def test_days_waiting_to_be_folded_are_read_too(setup: tuple[Path, Path, Path]) 
 
     assert known_days(history) == {date(2023, 1, 30), date(2023, 2, 1)}
     assert rows(f"SELECT count(DISTINCT date) FROM {source(history)}") == [(2,)]
+
+
+def test_files_from_before_rows_named_their_series_are_upgraded(
+    setup: tuple[Path, Path, Path],
+) -> None:
+    raw, current, history = setup
+    write_day(ratings_on(raw, 100), date(2023, 1, 30), history, current)
+    compact(history)
+    write_day(ratings_on(raw, 120), date(2023, 1, 31), history, current)
+    month, day_file = history / "2023-01.parquet", history / DAYS / "2023-01-31.parquet"
+    with duckdb.connect() as con:  # as they were: no series, sorted by title
+        for path, listed in ((month, "2023-01-30"), (day_file, None)):
+            metadata = f", KV_METADATA {{getgood_days: '{listed}'}}" if listed else ""
+            con.execute(
+                f"COPY (SELECT tid, date, rating_x10, votes FROM '{path}' ORDER BY tid, date) "
+                f"TO '{path}.old' (FORMAT parquet{metadata})"
+            )
+            Path(f"{path}.old").replace(path)
+
+    assert upgrade(history, current) == ["2023-01.parquet", "2023-01-31.parquet"]
+
+    assert known_days(history) == {date(2023, 1, 30), date(2023, 1, 31)}
+    ordered = rows(f"SELECT series, tid, date FROM '{month}'")
+    assert ordered == sorted(ordered)
+    assert {series for series, _, _ in ordered} == {1, 4}
+    assert upgrade(history, current) == []
+    assert compact(history) == ["2023-01"]
+    assert rows(f"SELECT count(*) FROM {source(history)}") == [(28,)]
 
 
 def test_an_empty_history_has_no_source(tmp_path: Path) -> None:

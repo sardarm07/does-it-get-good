@@ -33,7 +33,10 @@ EPISODES = """
     ORDER BY e.season, e.episode, e.tid
 """
 TITLES = "SELECT tid, season, episode FROM episodes WHERE series = ? ORDER BY season, episode"
-PAGE_DAYS = "SELECT date, rating_x10, votes FROM {history} WHERE tid = ? ORDER BY date"
+PAGE_DAYS = """
+    SELECT date, rating_x10, votes FROM {history} WHERE series = $series AND tid = $series
+    ORDER BY date
+"""
 PAGE_COLUMNS = ("date", "rating_x10", "votes")
 
 
@@ -301,7 +304,7 @@ def answer(con: duckdb.DuckDBPyConnection, match: Match, history: Path | None = 
         verdict=judge(episodes),
         contested=contested(episodes),
         labels=labels,
-        history=None if history is None else history_of(con, history, labels),
+        history=None if history is None else history_of(con, history, match.tid),
     )
 
 
@@ -313,16 +316,14 @@ def labels_of(con: duckdb.DuckDBPyConnection, series: int) -> dict[int, str]:
     }
 
 
-def history_of(
-    con: duckdb.DuckDBPyConnection, history: Path, labels: Mapping[int, str]
-) -> History | None:
-    """The events the history shows for the titles labelled, or None while it's empty."""
+def history_of(con: duckdb.DuckDBPyConnection, history: Path, series: int) -> History | None:
+    """The events the history shows for a series, or None while it's empty."""
     relation = source(history)
     days = known_days(history)
     if relation is None or not days:
         return None
-    titles = "tid IN (" + ", ".join(str(t) for t in labels) + ")"
-    flags = find_flags(con, relation, "episodes", days, where=titles)
-    series = next(t for t, name in labels.items() if name == SERIES_PAGE)
-    page = con.execute(PAGE_DAYS.format(history=relation), [series]).fetchall()
+    # The checks need only the show's own rows, which sit together in each month's file.
+    own = f"(SELECT tid, date, rating_x10, votes FROM {relation} WHERE series = {series})"
+    flags = find_flags(con, own, "episodes", days)
+    page = con.execute(PAGE_DAYS.format(history=relation), {"series": series}).fetchall()
     return History(len(days), min(days), max(days), tuple(group(flags)), tuple(page))

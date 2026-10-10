@@ -14,7 +14,7 @@ from getgood.charts import write_page
 from getgood.config import CURRENT_DB, DATA_DIR, MAX_GAP_DAYS, RECENT_DAYS
 from getgood.duck import scalar
 from getgood.fetch import FetchError, fetch_all
-from getgood.history import known_days, source
+from getgood.history import known_days, source, upgrade
 from getgood.load import build_current
 from getgood.report import answer
 from getgood.runs import log_run, recent_runs
@@ -114,6 +114,8 @@ def _sync(data_dir: Path, no_history: bool, run: dict[str, Any]) -> None:
     typer.echo(f"Tables {state}: {built.series:,} series, {built.rated_episodes:,} rated episodes")
 
     history, current = data_dir / "history", data_dir / CURRENT_DB
+    if upgraded := upgrade(history, current):
+        typer.echo(f"History: {len(upgraded):,} files sorted by series")
     if (day := save_today(raw_dir, history, current, downloads)) is not None:
         run["saved_today"] = day
         typer.echo(f"History: saved IMDb's file of {day}")

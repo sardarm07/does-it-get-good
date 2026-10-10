@@ -163,7 +163,9 @@ def test_show_prints_the_verdict_and_the_credit(data_dir: Path) -> None:
 def bombed(data_dir: Path) -> Path:
     """The same tables, with a history in which Grey's Anatomy S1E3 was bombed at launch."""
     episodes = [1_000_001 + k for k in range(6)]  # S1E1 to S1E6
-    write_history(data_dir / "history", season(1, episodes, bombed=1_000_003))
+    write_history(
+        data_dir / "history", season(1, episodes, bombed=1_000_003), data_dir / CURRENT_DB
+    )
     return data_dir
 
 

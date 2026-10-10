@@ -1,11 +1,12 @@
 """Ratings by day: one row per in-scope title per day, in monthly Parquet files.
 
 A sync writes each new day to data/history/days/<day>.parquet, then folds the days into
-data/history/<year>-<month>.parquet, sorted by title and then date, so one show's whole
-history reads in milliseconds. A month is small enough to re-sort on every sync, and each
-month's file lists its days in its metadata, so the history's days are known without
-reading its rows. Only in-scope titles are kept: the series in current.duckdb and their
-episodes.
+data/history/<year>-<month>.parquet. Every row names its series (a series page names
+itself), and a month's rows are sorted by series, title and date, so one show's whole
+history reads in milliseconds, however far apart its episodes' IDs are. A month is small
+enough to re-sort on every sync, and each month's file lists its days in its metadata, so
+the history's days are known without reading its rows. Only in-scope titles are kept: the
+series in current.duckdb and their episodes.
 """
 
 from collections.abc import Iterable
@@ -22,6 +23,8 @@ DAYS = "days"
 MONTHS = "[0-9][0-9][0-9][0-9]-[0-9][0-9].parquet"
 DAYS_KEY = "getgood_days"
 """The metadata key under which a month's file lists its days."""
+COLUMNS = "tid, series, date, rating_x10, votes"
+ORDER = "series, tid, date"
 
 
 def known_days(history: Path) -> set[date]:
@@ -53,16 +56,16 @@ def write_day(raw_file: Path, day: date, history: Path, current_db: Path) -> int
             con.execute(f"ATTACH {quote(current_db)} AS cur (READ_ONLY)")
             con.execute(f"""
                 COPY (
-                    SELECT CAST(substr(tconst, 3) AS INTEGER) AS tid,
-                           DATE '{day.isoformat()}' AS date,
-                           CAST(round(CAST(averageRating AS DOUBLE) * 10) AS UTINYINT)
+                    SELECT t.tid, t.series, DATE '{day.isoformat()}' AS date,
+                           CAST(round(CAST(r.averageRating AS DOUBLE) * 10) AS UTINYINT)
                                AS rating_x10,
-                           CAST(numVotes AS INTEGER) AS votes
-                    FROM {read_imdb(raw_file)}
-                    WHERE CAST(substr(tconst, 3) AS INTEGER) IN (
-                        SELECT tid FROM cur.series UNION ALL SELECT tid FROM cur.episodes
-                    )
-                    ORDER BY tid
+                           CAST(r.numVotes AS INTEGER) AS votes
+                    FROM {read_imdb(raw_file)} r
+                    JOIN (
+                        SELECT tid, tid AS series FROM cur.series
+                        UNION ALL SELECT tid, series FROM cur.episodes
+                    ) t ON t.tid = CAST(substr(r.tconst, 3) AS INTEGER)
+                    ORDER BY t.series, t.tid
                 ) TO {quote(tmp)} (FORMAT parquet, COMPRESSION zstd)""")
             rows: int = scalar(con, f"SELECT count(*) FROM read_parquet({quote(tmp)})")
         tmp.replace(dest)
@@ -72,7 +75,7 @@ def write_day(raw_file: Path, day: date, history: Path, current_db: Path) -> int
 
 
 def compact(history: Path) -> list[str]:
-    """Fold the waiting days into their months' files, sorted by title then date.
+    """Fold the waiting days into their months' files, sorted by series, title and date.
 
     Returns the months rewritten, as YYYY-MM. A day already in its month's file keeps the
     copy it has.
@@ -100,15 +103,52 @@ def compact(history: Path) -> list[str]:
                 tmp = target.with_name(target.name + ".tmp")
                 con.execute(f"""
                     COPY (
-                        SELECT tid, date, rating_x10, votes
-                        FROM read_parquet({_list(sources)})
-                        ORDER BY tid, date
+                        SELECT {COLUMNS} FROM read_parquet({_list(sources)}) ORDER BY {ORDER}
                     ) TO {quote(tmp)}
                     (FORMAT parquet, COMPRESSION zstd, KV_METADATA {{{DAYS_KEY}: '{listed}'}})""")
                 tmp.replace(target)
                 rewritten.append(month)
         for p in days:
             p.unlink()
+    return rewritten
+
+
+def upgrade(history: Path, current_db: Path) -> list[str]:
+    """Name each row's series in files written before rows named it, from the current
+    tables, and re-sort them. Returns the names of the files rewritten.
+    """
+    files = sorted(history.glob(MONTHS)) + sorted((history / DAYS).glob("*.parquet"))
+    rewritten: list[str] = []
+    if not files:
+        return rewritten
+    with duckdb.connect() as con:
+        con.execute(f"ATTACH {quote(current_db)} AS cur (READ_ONLY)")
+        for path in files:
+            columns = {
+                name
+                for (name,) in con.execute(
+                    f"SELECT name FROM parquet_schema({quote(path)})"
+                ).fetchall()
+            }
+            if "series" in columns:
+                continue
+            listed = con.execute(
+                f"SELECT decode(value) FROM parquet_kv_metadata({quote(path)}) "
+                "WHERE key = encode(?)",
+                [DAYS_KEY],
+            ).fetchone()
+            metadata = f", KV_METADATA {{{DAYS_KEY}: '{listed[0]}'}}" if listed else ""
+            tmp = path.with_name(path.name + ".tmp")
+            # an episode no longer in the tables can't be placed, so it's kept as its own series
+            con.execute(f"""
+                COPY (
+                    SELECT h.tid, coalesce(e.series, h.tid) AS series, h.date, h.rating_x10,
+                           h.votes
+                    FROM read_parquet({quote(path)}) h LEFT JOIN cur.episodes e USING (tid)
+                    ORDER BY {ORDER}
+                ) TO {quote(tmp)} (FORMAT parquet, COMPRESSION zstd{metadata})""")
+            tmp.replace(path)
+            rewritten.append(path.name)
     return rewritten
 
 

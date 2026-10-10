@@ -159,4 +159,4 @@ facts about shows, not IMDb data:
 | Precision | Review-bomb events drawn at random from the whole history (`make review`) and marked by hand as real or misread | 70% real |
 | Coverage | In-scope series that get a verdict | 95% |
 | Search | Labelled shows found first when their name is typed in lower case | 30 of 30 |
-| Speed | `getgood show`, from starting to printing the answer, for the most-voted and the longest series | Under 2 s |
+| Speed | `getgood show`, from starting to printing the answer, for the most-voted series, the longest, and the most-voted that began after the history did | Under 2 s |

@@ -1,6 +1,6 @@
 # 6. Store the history as one Parquet file per month
 
-Accepted, 2026-10-10.
+Accepted, 2026-10-10. Its sort order is replaced by [0007](0007-history-sorted-by-series.md).
 
 **Context.** The history was first planned as one file per year. Folding new days into a
 year meant re-sorting up to 250 million rows, and dropping duplicate days with a window over

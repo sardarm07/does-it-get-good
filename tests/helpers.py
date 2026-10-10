@@ -116,13 +116,15 @@ def season(show: int, episodes: Sequence[int], bombed: int, *, rating: float = 7
     return rows
 
 
-def write_history(history: Path, rows: Sequence[Row]) -> None:
-    """Save rows as one file per day, then fold them into months, as a sync does."""
+def write_history(history: Path, rows: Sequence[Row], current_db: Path) -> None:
+    """Save rows as one file per day, each title under its series in the current tables,
+    then fold them into months, as a sync does."""
     by_day: dict[date, list[Row]] = defaultdict(list)
     for r in rows:
         by_day[r[1]].append(r)
     (history / DAYS).mkdir(parents=True, exist_ok=True)
     with duckdb.connect() as con:
+        con.execute(f"ATTACH {quote(current_db)} AS cur (READ_ONLY)")
         for d, day_rows in by_day.items():
             con.execute(
                 "CREATE OR REPLACE TABLE d AS SELECT CAST(unnest($tid) AS INTEGER) AS tid, "
@@ -137,7 +139,13 @@ def write_history(history: Path, rows: Sequence[Row]) -> None:
                 },
             )
             dest = history / DAYS / f"{d.isoformat()}.parquet"
-            con.execute(f"COPY (SELECT * FROM d ORDER BY tid) TO {quote(dest)} (FORMAT parquet)")
+            con.execute(f"""
+                COPY (
+                    SELECT d.tid, coalesce(e.series, d.tid) AS series, d.date, d.rating_x10,
+                           d.votes
+                    FROM d LEFT JOIN cur.episodes e USING (tid)
+                    ORDER BY series, d.tid
+                ) TO {quote(dest)} (FORMAT parquet)""")
     compact(history)
 
 
@@ -151,5 +159,7 @@ def two_bombs(data_dir: Path) -> Path:
     build_current(raw, data_dir / CURRENT_DB, downloads(raw))
     rows = season(1, [1_000_001 + k for k in range(6)], bombed=1_000_003)
     page = burst([r for r in rows if r[0] == 1], at=50, extra=5_000, rating=8.2)
-    write_history(data_dir / "history", page + [r for r in rows if r[0] != 1])
+    write_history(
+        data_dir / "history", page + [r for r in rows if r[0] != 1], data_dir / CURRENT_DB
+    )
     return data_dir
