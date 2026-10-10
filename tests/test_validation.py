@@ -156,6 +156,7 @@ def test_drawing_for_review_lists_each_bomb_once_and_keeps_verdicts(tmp_path: Pa
     listed = tmp_path / "reviewed.yaml"
 
     assert draw_for_review(data, 1, listed) == 1
+    assert "  verdict:\n" in listed.read_text()  # blank, with no trailing space
     first = load_reviewed(listed)
     first[0]["verdict"] = "real"
     write_reviewed(first, listed)

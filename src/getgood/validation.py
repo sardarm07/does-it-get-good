@@ -210,7 +210,8 @@ def write_reviewed(entries: Sequence[Mapping[str, Any]], path: Path = REVIEWED) 
             f"  from: {e['from']}\n"
             f"  to: {e['to']}\n"
             f"  summary: {json.dumps(e['summary'], ensure_ascii=False)}\n"
-            f"  verdict: {e.get('verdict') or ''}\n"
+            # a blank verdict is left bare, with no trailing space
+            f"  verdict:{f' {v}' if (v := e.get('verdict')) else ''}\n"
             f"  note: {json.dumps(e.get('note') or '', ensure_ascii=False)}\n"
         )
     path.write_text("\n".join(blocks))
