@@ -126,16 +126,17 @@ always draw more votes, and lower ratings, from people who don't go on.
 bombers rate the series page without watching, so the page falls below its own episodes.
 For a series page the history saw arrive, each of days 1 to 13 compares the page with its
 episodes' vote-weighted rating that day. Most pages sit below their episodes anyway, since
-episode ratings come mostly from fans: across 74 launches in late 2022 the median page was
-0.4 below, and disliked shows sit lower still. So a page is flagged only when it rates 0.5
-or more below its episodes and the gap would take 10,000 or more low votes to open, the 1s
-it would take to drag the page from its episodes' rating to its own:
+episode ratings come mostly from fans: across 703 launches with 1,000 or more page votes,
+the median page ended its first two weeks 0.4 below, and a quarter 0.8 or more below. So a
+page is flagged only when it rates 0.5 or more below its episodes and the gap would take
+10,000 or more low votes to open, the 1s it would take to drag the page from its episodes'
+rating to its own:
 
     votes × (episodes' rating − page's rating) / (episodes' rating − 1)
 
-Of 25 launches with 8,000 or more page votes in their first two weeks, the three that the
-press documented as bombs (She-Hulk, The Rings of Power and Velma) needed 11,000 to 40,000;
-every other needed 5,800 or fewer.
+Of 120 launches with 8,000 or more page votes in their first two weeks, the five that the
+press documented as bombs (She-Hulk, The Rings of Power, Velma, The Acolyte and Ironheart)
+needed 12,800 to 40,400; every other needed 6,000 or fewer.
 
 **Events.** Flags on one show no more than 2 days apart are one event, which is a review
 bomb if any flag is, otherwise a boost if any flag is. It's series-wide when it touches the

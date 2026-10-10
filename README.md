@@ -62,7 +62,7 @@ Information courtesy of IMDb (https://www.imdb.com). Used with permission.
 
 Ratings with few votes are pulled toward the show's average before anything else happens, so a handful of votes can't create a turn. The verdict comes from splitting the episodes into flat stretches and reading the jumps between them; the reason line shows the numbers behind it.
 
-Review bombs come from the history. Each day, every title's new votes are compared with its own usual pace: a surge far beyond it that drags the rating down is a review bomb, one that lifts the rating is a boost, and one that leaves it alone is a vote surge. A new episode has no pace of its own yet, so for its first two weeks it's compared with its season's other episodes at the same age. Contested episodes come from today's numbers alone: far more votes than the episodes around them and a much lower rating. That can't be dated or told apart from honest backlash, so it isn't called a bomb.
+Review bombs come from the history. Each day, every title's new votes are compared with its own usual pace: a surge far beyond it that drags the rating down is a review bomb, one that lifts the rating is a boost, and one that leaves it alone is a vote surge. A new episode has no pace of its own yet, so for its first two weeks it's compared with its season's other episodes at the same age, and a new show's series page with its own episodes: bombers rate the page without watching, so a page far below its episodes on a crowd of votes is a review bomb. Contested episodes come from today's numbers alone: far more votes than the episodes around them and a much lower rating. That can't be dated or told apart from honest backlash, so it isn't called a bomb.
 
 ## Development
 

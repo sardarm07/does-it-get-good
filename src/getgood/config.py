@@ -129,7 +129,8 @@ PAGE_EXCESS = 10_000
 """...and that gap takes at least this many low votes: the 1s it would take to drag the page
 from its episodes' rating to its own. Episode ratings come mostly from fans, so most pages
 sit below their episodes; it takes a crowd that rated the page without the episodes to
-open a gap this wide on this many votes."""
+open a gap this wide on this many votes. Of 120 launches with 8,000 page votes in their first
+two weeks, the five the press documented as bombs needed 12,800 to 40,400; no other, 6,000."""
 EVENT_DAYS = 2
 """Flags on one show this close together are one event."""
 RECENT_DAYS = 30
