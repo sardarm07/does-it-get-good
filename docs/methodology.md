@@ -118,9 +118,11 @@ Three kinds of day aren't judged against the title's own pace:
 
 **The launch check.** An episode in its first 14 days has no pace of its own, so it's
 compared with its season's other episodes at the same age, for episodes the history saw
-arrive (it holds a day within 3 days before the episode's first). On each of days 1 to 13,
-twice their median votes and a rating 0.5 or more below their median is a review bomb, the
-bar a contested episode clears; a season's last episode needs three times their votes,
+arrive (it holds a day within 3 days before the episode's first). The others need a median
+of 200 or more votes at that age, as a contested episode's neighbours do: episodes rated by
+a handful of people long before they aired say nothing about a launch. On each of days 1 to
+13, twice their median votes and a rating 0.5 or more below their median is a review bomb,
+the bar a contested episode clears; a season's last episode needs three times their votes,
 since finales draw extra votes anyway. Season premieres are left out on both sides: they
 always draw more votes, and lower ratings, from people who don't go on.
 

@@ -145,7 +145,8 @@ CONTESTED_EDGE_RATIO = 3.0
 CONTESTED_DROP = 0.5
 """...and rates at least this far below its neighbours' median."""
 CONTESTED_NEIGHBOUR_VOTES = 200
-"""Neighbours need this many median votes, so an established audience is being compared."""
+"""Neighbours need this many median votes, so an established audience is being compared; so
+do a launching episode's siblings, and a launching series page's episodes in all."""
 
 MIN_SIMILARITY = 0.88
 """Jaro-Winkler similarity a typed name needs to match a title it doesn't contain."""

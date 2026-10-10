@@ -8,8 +8,9 @@ Three checks, all in SQL over the history, so one show and every show use the sa
   reached within 3 days of the last. A surge that drags the rating down is a bomb, one that
   lifts it is a boost, and one that leaves it where it was is suspicious.
 - Launch: an episode in its first 14 days has no pace of its own yet, so it's compared with
-  its season's other episodes at the same age. Twice their votes (three times for a season
-  finale) and a far lower rating is a bomb. Season premieres are left out on both sides:
+  its season's other episodes at the same age, when they have an audience of their own (a
+  median of 200 votes). Twice their votes (three times for a season finale) and a far lower
+  rating is a bomb. Season premieres are left out on both sides:
   they always draw extra votes, and lower ratings, from people who don't go on.
 - Page: a series page in its first 14 days is compared with its own episodes. Bombers rate
   the page without watching, so it falls below the episodes; it's a bomb when the gap is
@@ -158,6 +159,7 @@ LAUNCH = f"""
     SELECT tid, series, date, votes, rating_x10, siblings_votes, siblings_rating_x10
     FROM compared
     WHERE votes >= {MIN_BOMB_VOTES}
+      AND siblings_votes >= {CONTESTED_NEIGHBOUR_VOTES}
       AND votes >= CASE WHEN finale THEN {LAUNCH_FINALE_RATIO} ELSE {LAUNCH_RATIO} END
                    * siblings_votes
       AND rating_x10 <= siblings_rating_x10 - {round(LAUNCH_DROP * 10)}

@@ -240,6 +240,14 @@ def test_a_season_finale_needs_three_times_its_siblings_votes(
     assert {(f.tid, f.check) for f in flags(con, *five_episodes(bombed=5))} == {(105, "launch")}
 
 
+def test_siblings_need_an_audience_of_their_own(con: duckdb.DuckDBPyConnection) -> None:
+    rows, episodes = five_episodes(bombed=3)
+    # rated by a handful of people before they aired, the others never pass 150 votes
+    rows = [(t, d, r, min(v, 150) if t in (102, 104, 105) else v) for t, d, r, v in rows]
+
+    assert flags(con, rows, episodes) == []
+
+
 def test_a_season_premiere_is_left_out_at_launch(con: duckdb.DuckDBPyConnection) -> None:
     rows, episodes = five_episodes(bombed=1)
 
