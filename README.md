@@ -4,7 +4,7 @@ Find the episode where a TV series gets good, where it slumps, and when it got r
 
 `getgood` is a command-line tool for personal use. It works from IMDb's free non-commercial datasets and keeps everything it downloads on your own machine.
 
-> **Status:** verdicts, the rating history, review bombs and charts all work. The bomb thresholds are being checked against the full history.
+> **Status:** everything works, on a history of 1,352 days back to February 2022. Verdicts, search and speed meet their targets; the review-bomb checks find 7 of 10 documented bombs, and about 6 in 10 of the events they call bombs are real, short of their targets of 8 and 7. The [methodology](docs/methodology.md#validation) says why.
 
 ## Setup
 
@@ -58,11 +58,11 @@ History:      1,412 days from 2022-02-21 to 2026-10-09
 Information courtesy of IMDb (https://www.imdb.com). Used with permission.
 ```
 
-`--chart` writes the answer to `data/charts/<id>.html` and opens it: every episode's rating with the stretches it splits into, the turn, slumps, low points and contested episodes marked, and the votes behind each rating. Hover an episode for its numbers, or open the table. The page works offline.
+`--chart` writes the answer to `data/charts/<id>.html` and opens it: every episode's rating with the stretches it splits into, the turn, slumps, low points and contested episodes marked, the votes behind each rating, and the series page's rating and votes day by day with review bombs marked. Hover for the numbers, or open the table. The page works offline.
 
 Ratings with few votes are pulled toward the show's average before anything else happens, so a handful of votes can't create a turn. The verdict comes from splitting the episodes into flat stretches and reading the jumps between them; the reason line shows the numbers behind it.
 
-Review bombs come from the history. Each day, every title's new votes are compared with its own usual pace: a surge far beyond it that drags the rating down is a review bomb, one that lifts the rating is a boost, and one that leaves it alone is a vote surge. A new episode has no pace of its own yet, so for its first two weeks it's compared with its season's other episodes at the same age, and a new show's series page with its own episodes: bombers rate the page without watching, so a page far below its episodes on a crowd of votes is a review bomb. Contested episodes come from today's numbers alone: far more votes than the episodes around them and a much lower rating. That can't be dated or told apart from honest backlash, so it isn't called a bomb.
+Review bombs come from the history. Each day, every title's new votes are compared with its own usual pace: a surge far beyond it that drags the rating down, on votes well below it, is a review bomb, one that lifts the rating is a boost, and any other is a vote surge. A new episode has no pace of its own yet, so for its first two weeks it's compared with its season's other episodes at the same age, and a new show's series page with its own episodes: bombers rate the page without watching, so a page far below its episodes on a crowd of votes is a review bomb. Contested episodes come from today's numbers alone: far more votes than the episodes around them and a much lower rating. That can't be dated or told apart from honest backlash, so it isn't called a bomb.
 
 ## Development
 

@@ -21,7 +21,8 @@ and 685,056 rated episodes.
 more than 2% from the last good file (allowing 2% per 30 days between them), with more than
 0.1% of season or episode numbers unreadable, or with ratings from fewer than 5 votes. The
 new tables are compared with the last ones too: the number of series in scope may move 3%,
-and 1% of titles may lose votes, per 30 days.
+and 1% of titles may lose votes, per 30 days. IMDb publishes daily, so a newest file more
+than 3 days old draws a warning.
 
 **History.** Review bombs are about change over days, and IMDb keeps no history. The
 Internet Archive saved copies of `title.ratings.tsv.gz` on most days since 2022-02-22.
@@ -151,26 +152,56 @@ needed 12,800 to 40,400; every other needed 6,000 or fewer.
 **Events.** Flags on one show no more than 2 days apart are one event, which is a review
 bomb if any flag is, otherwise a boost if any flag is. It's series-wide when it touches the
 series page or 3 or more episodes. Its size is the votes beyond the usual: daily surges add
-up, while a launch or page flag's lead counts once per title, since it repeats each day. `getgood bombs` lists the biggest, newest first; reading every show, it only
-looks at titles with 500 or more votes today, since votes only grow.
+up, while a launch or page flag's lead counts once per title, since it repeats each day.
+`getgood bombs` lists the biggest, newest first; reading every show, it only looks at
+titles with 500 or more votes today, since votes only grow.
 
 **What it can't see.** IMDb's files have no breakdown of votes by star, so a bomb whose
-votes IMDb's own weighting absorbs, or that moves a big title's rating by less than 0.2,
-is a vote surge at most. A bomb in a gap of the archive's copies, or before 2022-02-22,
-isn't seen at all, and neither is a bomb that grows a small show's votes fivefold. Low
-ratings that come at the usual pace aren't a burst either: a season rated low from its
-first day on fewer votes than the last, or an episode whose rating slides for weeks.
+votes IMDb's own weighting absorbs, or that moves a big title's rating by less than 0.2, is
+a vote surge at most. A bomb in a gap of the archive's copies, or before 2022-02-22, isn't
+seen at all, and neither is a bomb that grows a small show's votes fivefold. Low ratings
+that don't single anything out aren't seen either: a season released at once and rated low
+throughout, so no episode stands out from the others, or an episode whose rating slides for
+weeks.
+
+## Finding a show
+
+An IMDb ID is looked up as it is. A typed name is lower-cased, with accents and punctuation
+dropped and "&" read as "and", then matched against every series in scope, best first:
+
+1. the whole title, ignoring spaces, so "agents of shield" finds Agents of S.H.I.E.L.D.;
+2. the start of a title;
+3. a whole word or words inside one;
+4. any part of one;
+5. failing those, a near miss such as a typo: a Jaro–Winkler similarity of 0.88 or more.
+
+Among equally good matches the most-voted wins. When another is just as good (for a near
+miss, within 0.03) and has at least 5% of its votes, `getgood show` asks which was meant,
+so a namesake almost nobody watches never gets in the way; `--year` chooses between them.
 
 ## Validation
 
 `make validate` scores everything against labels in `validation/`, which are hand-written
-facts about shows, not IMDb data:
+facts about shows, not IMDb data. The results are for IMDb's files of 2026-10-09 and the
+history up to that day:
 
-| Measure | How | Target |
-| --- | --- | --- |
-| Turning points | 30 shows with a well-known turn, slump or low point, which must land within 3 episodes (1 for a low point) | 24 of 30 |
-| Known bombs | 10 review bombs since 2022 that the press documented, which need a review-bomb event on their titles within their dates; those the history has no days for are reported, not scored | 8 of 10 |
-| Precision | Review-bomb events drawn at random from the whole history (`make review`) and marked by hand as real or misread | 70% real |
-| Coverage | In-scope series that get a verdict | 95% |
-| Search | Labelled shows found first when their name is typed in lower case | 30 of 30 |
-| Speed | `getgood show`, from starting to printing the answer, for the most-voted series, the longest, and the most-voted that began after the history did | Under 2 s |
+| Measure | How | Target | Result |
+| --- | --- | --- | --- |
+| Turning points | 30 shows with a well-known turn, slump or low point, which must land within 3 episodes (1 for a low point) | 24 of 30 | 24 of 30 |
+| Known bombs | 10 review bombs since 2022 that the press documented, which need a review-bomb event on their titles within their dates; those the history has no days for are reported, not scored | 8 of 10 | 7 of 10 |
+| Precision | Review-bomb events drawn at random from the whole history (`make review`) and marked by hand as real or misread, with the evidence for each; unsure ones aren't scored | 70% real | 13 of 22 (59%), 8 unsure |
+| Coverage | In-scope series that get a verdict | 95% | 100% |
+| Search | Labelled shows found first when their name is typed in lower case | 30 of 30 | 30 of 30 |
+| Speed | `getgood show`, from starting to printing the answer, for the most-voted series, the longest, and the most-voted that began after the history did | Under 2 s | 0.8 s |
+
+The bomb checks fall short of both their targets, for reasons votes and ratings can't
+overcome. Of the known bombs, Agatha All Along's page needed about 1,500 low votes to
+explain, while 13 launches nobody called bombs needed more; The Last of Us S2E4 slid for
+two weeks with no burst; and The Witcher's fourth season came out at once and rated about 4
+throughout, so no episode stood out from the others, while its page, on 600,000 votes,
+never moved. Of the events marked misread, most are episodes that drew a crowd and
+disappointed it, such as the Strange New Worlds musical or The Handmaid's Tale's finale: in
+votes and ratings they look just like The Last of Us S1E3, a documented bomb. Reviewing the
+first sample also fixed three causes of false alarms, now in the rules above: days after a
+long gap in the history, launches compared with siblings few people had rated, and surges
+whose votes weren't low.
