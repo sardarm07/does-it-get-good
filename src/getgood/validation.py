@@ -51,12 +51,15 @@ REVIEW_HEADER = """\
 # hand, to measure how many are real. `make validate` reports the share marked real among
 # the events the detector still finds; `make review` draws more.
 #
-#   verdict  real: a burst of votes the show's ordinary viewing doesn't explain, such as a
-#              campaign the press reported or a pile of 1s landing on an old title
-#            misread: ordinary viewing taken for a bomb, such as an episode airing, a season
-#              arriving on a new service, or a glitch in the data
-#            unsure: can't tell either way; not scored
+#   verdict  real: low votes the show's ordinary viewing doesn't explain, such as a
+#              campaign or protest the press reported, or a pile of 1s on a title with
+#              nothing new
+#            misread: ordinary viewing taken for a bomb, such as an episode airing, a finale
+#              its viewers disliked, votes that aren't low, a season arriving on a new
+#              service, or a glitch in the data
+#            unsure: can't tell either way; listed but not scored
 #            blank until reviewed
+#   note     the evidence; an event the detector no longer finds says which commit dropped it
 """
 
 
@@ -267,12 +270,12 @@ def draw_for_review(
 
 
 def score_review(data_dir: Path, path: Path = REVIEWED) -> bool:
-    marked = [e for e in load_reviewed(path) if e.get("verdict") in ("real", "misread")]
+    marked = [e for e in load_reviewed(path) if e.get("verdict") in ("real", "misread", "unsure")]
     if not marked:
         print("No events reviewed yet: make review draws some to mark.")
         return True
     history = data_dir / "history"
-    real = found = 0
+    real = scored = unsure = 0
     with duckdb.connect(str(data_dir / CURRENT_DB), read_only=True) as con:
         for entry in marked:
             name = f"{entry['title']}, {entry['from']} to {entry['to']}"
@@ -281,11 +284,17 @@ def score_review(data_dir: Path, path: Path = REVIEWED) -> bool:
             if not any(e.kind == "bomb" and same_event(entry, e) for e in events):
                 print(f"gone    {name}: no longer found")
                 continue
-            found += 1
-            real += entry["verdict"] == "real"
+            if entry["verdict"] == "unsure":
+                unsure += 1
+            else:
+                scored += 1
+                real += entry["verdict"] == "real"
             print(f"{entry['verdict']:7} {name}")
-    print(f"\n{real}/{found} reviewed review bombs are real (target {PRECISION_TARGET:.0%})")
-    return found == 0 or real >= PRECISION_TARGET * found
+    print(
+        f"\n{real}/{scored} reviewed review bombs are real (target {PRECISION_TARGET:.0%})"
+        + (f"; {unsure} unsure, not scored" if unsure else "")
+    )
+    return scored == 0 or real >= PRECISION_TARGET * scored
 
 
 ALL_EPISODES = """

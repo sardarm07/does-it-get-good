@@ -187,6 +187,22 @@ def test_precision_counts_the_reviewed_bombs_still_found(tmp_path: Path) -> None
     assert score_review(data, listed) is True
 
 
+def test_unsure_events_are_listed_but_not_scored(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = two_bombs(tmp_path / "data")
+    listed = tmp_path / "reviewed.yaml"
+    draw_for_review(data, 2, listed)
+    entries = load_reviewed(listed)
+    entries[0]["verdict"], entries[1]["verdict"] = "real", "unsure"
+    write_reviewed(entries, listed)
+
+    assert score_review(data, listed) is True
+    assert "1/1 reviewed review bombs are real (target 70%); 1 unsure, not scored" in (
+        capsys.readouterr().out
+    )
+
+
 @pytest.fixture
 def tables(tmp_path: Path) -> Path:
     raw = tmp_path / "raw"
