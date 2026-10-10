@@ -106,9 +106,11 @@ but IMDb rounds ratings to 0.1, which leaves an error of about 0.1 × votes ÷ n
 shown when that error is under 1 point. It can't find a bomb the rating change misses:
 being 3 points below the old rating with 1 point of error already moves the rating by 0.3.
 
-Two kinds of day aren't judged against the title's own pace:
+Three kinds of day aren't judged against the title's own pace:
 
 - the title's first 14 days in the history, which have no pace yet;
+- a day more than 3 days after the history's last, since what changed in between can't be
+  put on a day;
 - days when the title is **arriving**: its votes grow fivefold within 14 days either side,
   counting the last day before a gap in the history. Shows rated before their release
   surge on release day with their hype ratings falling, which isn't a bomb. Releases

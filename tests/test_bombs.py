@@ -180,6 +180,18 @@ def test_new_votes_are_spread_over_missing_days(con: duckdb.DuckDBPyConnection) 
     assert found.extra_votes == 600
 
 
+def test_a_change_across_more_than_three_missing_days_cant_be_dated(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    rows = [
+        r
+        for r in steady(101, range(61), votes=1_000, pace=10, rating=8.5)
+        if not day(36) <= r[1] <= day(39)
+    ]
+
+    assert flags(con, burst(rows, at=40, extra=600, rating=8.0)) == []
+
+
 def test_since_and_until_choose_the_days_but_not_the_baseline(
     con: duckdb.DuckDBPyConnection,
 ) -> None:

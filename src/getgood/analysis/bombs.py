@@ -4,9 +4,9 @@ Three checks, all in SQL over the history, so one show and every show use the sa
 
 - Daily: a title with 500+ votes, at least 14 days into the history and not arriving (its
   votes don't grow fivefold within 14 days either side), is compared with its own pace over
-  its last 28 history days (a robust z-score of new votes per day). A surge that drags the
-  rating down is a bomb, one that lifts it is a boost, and one that leaves it where it was
-  is suspicious.
+  its last 28 history days (a robust z-score of new votes per day), on days the history
+  reached within 3 days of the last. A surge that drags the rating down is a bomb, one that
+  lifts it is a boost, and one that leaves it where it was is suspicious.
 - Launch: an episode in its first 14 days has no pace of its own yet, so it's compared with
   its season's other episodes at the same age. Twice their votes (three times for a season
   finale) and a far lower rating is a bomb. Season premieres are left out on both sides:
@@ -111,6 +111,7 @@ DAILY = f"""
     WHERE s.votes >= {MIN_BOMB_VOTES}
       AND s.base_days >= {MIN_BASELINE_DAYS}
       AND s.date - s.first_day >= {LAUNCH_DAYS}
+      AND s.gap <= {MAX_GAP_DAYS}
       AND NOT s.arriving
       AND (s.dv - s.base) / (1.4826 * s.spread + 1) >= {SURGE_Z}
       AND s.dv >= greatest({SURGE_MIN_VOTES}, {SURGE_MIN_SHARE} * s.votes)
